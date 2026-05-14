@@ -1,17 +1,10 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
-
 export type ProfilePlan = 'free' | 'pro' | 'team'
 export type PresentationStatus = 'draft' | 'generated' | 'edited' | 'exported'
 export type MomentEmotion = 'hook' | 'empathy' | 'build' | 'reveal' | 'proof' | 'close'
 export type ExportFormat = 'pptx' | 'pdf' | 'md'
+export type JsonObjectArray = Record<string, unknown>[]
 
-export interface ProfilesRow {
+export type ProfilesRow = {
   id: string
   email: string
   display_name: string | null
@@ -23,7 +16,7 @@ export interface ProfilesRow {
   created_at: string
 }
 
-export interface ProfilesInsert {
+export type ProfilesInsert = {
   id: string
   email: string
   display_name?: string | null
@@ -35,7 +28,7 @@ export interface ProfilesInsert {
   created_at?: string
 }
 
-export interface ProfilesUpdate {
+export type ProfilesUpdate = {
   id?: string
   email?: string
   display_name?: string | null
@@ -47,7 +40,7 @@ export interface ProfilesUpdate {
   created_at?: string
 }
 
-export interface PresentationsRow {
+export type PresentationsRow = {
   id: string
   user_id: string
   title: string
@@ -56,12 +49,12 @@ export interface PresentationsRow {
   total_duration: string | null
   status: PresentationStatus
   prompt_version: number
-  tips: Json
+  tips: string[]
   created_at: string
   updated_at: string
 }
 
-export interface PresentationsInsert {
+export type PresentationsInsert = {
   id?: string
   user_id: string
   title: string
@@ -70,12 +63,12 @@ export interface PresentationsInsert {
   total_duration?: string | null
   status?: PresentationStatus
   prompt_version?: number
-  tips?: Json
+  tips?: string[]
   created_at?: string
   updated_at?: string
 }
 
-export interface PresentationsUpdate {
+export type PresentationsUpdate = {
   id?: string
   user_id?: string
   title?: string
@@ -84,12 +77,12 @@ export interface PresentationsUpdate {
   total_duration?: string | null
   status?: PresentationStatus
   prompt_version?: number
-  tips?: Json
+  tips?: string[]
   created_at?: string
   updated_at?: string
 }
 
-export interface MomentsRow {
+export type MomentsRow = {
   id: string
   presentation_id: string
   position: number
@@ -97,14 +90,14 @@ export interface MomentsRow {
   emotion: MomentEmotion
   duration_seconds: number
   slide_heading: string | null
-  slide_bullets: Json
+  slide_bullets: string[]
   script: string
-  sources: Json
+  sources: JsonObjectArray
   created_at: string
   updated_at: string
 }
 
-export interface MomentsInsert {
+export type MomentsInsert = {
   id?: string
   presentation_id: string
   position: number
@@ -112,14 +105,14 @@ export interface MomentsInsert {
   emotion: MomentEmotion
   duration_seconds?: number
   slide_heading?: string | null
-  slide_bullets?: Json
+  slide_bullets?: string[]
   script?: string
-  sources?: Json
+  sources?: JsonObjectArray
   created_at?: string
   updated_at?: string
 }
 
-export interface MomentsUpdate {
+export type MomentsUpdate = {
   id?: string
   presentation_id?: string
   position?: number
@@ -127,71 +120,71 @@ export interface MomentsUpdate {
   emotion?: MomentEmotion
   duration_seconds?: number
   slide_heading?: string | null
-  slide_bullets?: Json
+  slide_bullets?: string[]
   script?: string
-  sources?: Json
+  sources?: JsonObjectArray
   created_at?: string
   updated_at?: string
 }
 
-export interface SourceDocumentsRow {
+export type SourceDocumentsRow = {
   id: string
   presentation_id: string
   filename: string
   file_path: string
   file_size: number | null
   extracted_text: string | null
-  chunks: Json
+  chunks: JsonObjectArray
   uploaded_at: string
 }
 
-export interface SourceDocumentsInsert {
+export type SourceDocumentsInsert = {
   id?: string
   presentation_id: string
   filename: string
   file_path: string
   file_size?: number | null
   extracted_text?: string | null
-  chunks?: Json
+  chunks?: JsonObjectArray
   uploaded_at?: string
 }
 
-export interface SourceDocumentsUpdate {
+export type SourceDocumentsUpdate = {
   id?: string
   presentation_id?: string
   filename?: string
   file_path?: string
   file_size?: number | null
   extracted_text?: string | null
-  chunks?: Json
+  chunks?: JsonObjectArray
   uploaded_at?: string
 }
 
-export interface AgentConversationsRow {
+export type AgentConversationsRow = {
   id: string
   presentation_id: string
-  messages: Json
+  messages: JsonObjectArray
   created_at: string
   updated_at: string
 }
 
-export interface AgentConversationsInsert {
+export type AgentConversationsInsert = {
   id?: string
   presentation_id: string
-  messages?: Json
+  messages?: JsonObjectArray
   created_at?: string
   updated_at?: string
 }
 
-export interface AgentConversationsUpdate {
+export type AgentConversationsUpdate = {
   id?: string
   presentation_id?: string
-  messages?: Json
+  messages?: JsonObjectArray
   created_at?: string
   updated_at?: string
 }
 
-export interface ExportsRow {
+export type ExportsRow = {
   id: string
   presentation_id: string
   format: ExportFormat
@@ -201,7 +194,7 @@ export interface ExportsRow {
   created_at: string
 }
 
-export interface ExportsInsert {
+export type ExportsInsert = {
   id?: string
   presentation_id: string
   format: ExportFormat
@@ -211,7 +204,7 @@ export interface ExportsInsert {
   created_at?: string
 }
 
-export interface ExportsUpdate {
+export type ExportsUpdate = {
   id?: string
   presentation_id?: string
   format?: ExportFormat
@@ -221,7 +214,7 @@ export interface ExportsUpdate {
   created_at?: string
 }
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       profiles: {
