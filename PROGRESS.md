@@ -75,7 +75,8 @@
 
 ---
 
-## Phase 8: Document Upload & Text Extraction *(In Progress — uncommitted)*
+## Phase 8: Document Upload & Text Extraction
+**Commit:** `be3a65f` — added file upload functionality component
 
 - **Packages added:** `pdf-parse`, `mammoth`
 - **`src/lib/documents/parser.ts`** — Text extraction utility
@@ -129,7 +130,8 @@
 
 ---
 
-## Phase 10: Moment Generation Pipeline *(In Progress — uncommitted)*
+## Phase 10: Moment Generation Pipeline
+**Commit:** `57ce461` — added moment generation pipeline
 
 - **`src/modules/generation/router.ts`** — Core generation tRPC router
   - `create`: Fetches presentation context and source documents, checks daily plan limits (`free=3`, `pro=50`, `team=50`), assembles the generation prompt, streams and collects `generateMoments(prompt)`, strips markdown fences, parses/validates JSON, replaces existing moments, updates presentation status/duration/tips, increments generation count, and returns created moments
@@ -164,8 +166,102 @@
 
 ---
 
+## Phase 11: Workspace Storyboard UI
+**Commit:** `2d95f30` — workspace ui + wiring
+
+- **`src/stores/presentation.ts`** — Zustand presentation store
+  - Stores current presentation, ordered moments, active moment index, save status, and last saved timestamp
+  - Provides actions for setting presentation data, editing moments, adding/deleting moments, and reordering moments
+- **Workspace components added:**
+  - `TopBar`: Dashboard back link, title, metadata pills, action buttons, and save indicator placement
+  - `ArcBar`: Duration-weighted emotional arc with emotion color segments
+  - `MomentList`: Vertical storyboard timeline with staggered load animation
+  - `MomentCard`: Collapsed/expanded moment UI with slide preview, script preview, timing badge, emotion badge, and source pills
+  - `SlideEditor`: Inline editable dark 16:9 slide card with editable heading and bullets
+  - `ScriptEditor`: Warm script card with textarea edit mode and Save/Cancel controls
+- **`src/components/workspace/WorkspaceClient.tsx`** — Workspace composition
+  - Hydrates Zustand from `presentation.getById`
+  - Preserves draft upload/generation flow for presentations without moments
+  - Renders storyboard workspace with agent sidebar placeholder
+- **Validation:**
+  - `npx tsc --noEmit --pretty false` passed
+  - `git diff --check` passed
+  - `npm run build` passed
+  - Authenticated workspace rendered at `http://localhost:3000/workspace/8ef57b37-5656-4ab7-b76f-29e2998da181`
+
+---
+
+## Phase 12: Workspace Autosave
+**Commit:** `3bd074d` — autosave
+
+- **`src/modules/moment/router.ts`** — Moment persistence API
+  - `update`: Saves partial moment edits for title, emotion, duration, slide heading, bullets, script, and sources
+  - `batchUpdate`: Saves reordered moment positions through a Supabase RPC transaction
+- **`supabase/migrations/002_batch_update_moment_positions.sql`** — Reorder transaction helper
+  - Adds `batch_update_moment_positions(p_updates jsonb)` Postgres function
+  - Applied manually through Supabase SQL Editor
+- **`src/hooks/useAutosave.ts`** — Debounced autosave hook
+  - Watches dirty moments in the Zustand store
+  - Debounces edits for 1500ms
+  - Sends only changed fields to `moment.update`
+  - Retries once after 3 seconds on save failure
+- **`src/stores/presentation.ts`** — Dirty/save state
+  - Adds `saveError`, `dirtyMomentIds`, `markMomentDirty`, and `clearDirtyMoments`
+  - Keeps edits optimistic so UI updates immediately while save runs in the background
+- **`src/components/ui/SaveIndicator.tsx`** — Top-bar save state UI
+  - Shows **All changes saved**, **Saving...**, or **Save failed — retrying**
+  - Displays relative saved time such as **Saved 5 seconds ago**
+- **`src/components/ui/Toast.tsx`** — Bottom-center toast notifications
+  - Auto-dismisses after 4 seconds
+  - Used by autosave failure handling
+- **Validation:**
+  - `npx tsc --noEmit --pretty false` passed
+  - `git diff --check` passed
+  - `npm run build` passed
+  - Authenticated workspace rendered with save indicator visible
+
+---
+
+## Phase 13: AI Agent Chat Sidebar *(In Progress — uncommitted)*
+
+- **`src/modules/agent/router.ts`** — Agent tRPC router
+  - `chat`: Fetches presentation context, loads/creates conversation history, builds the Haiku system prompt, collects the streamed agent response, parses edit tags, applies script/slide updates, persists conversation messages, and returns clean text plus updated moments
+  - `getHistory`: Loads existing conversation messages for the workspace sidebar
+- **`src/lib/ai/agent.ts`** — Agent model wrapper
+  - Uses current Anthropic Haiku model `claude-haiku-4-5-20251001` by default
+  - Supports `ANTHROPIC_AGENT_MODEL` override for future model swaps
+- **`src/lib/ai/edit-parser.ts`** — Agent edit tag parser
+  - Extracts `<newscript moment_id="N">...</newscript>` edits
+  - Extracts `<newslide moment_id="N">{"slide_heading":"...","slide_bullets":[...]}</newslide>` edits
+  - Removes XML edit tags from the visible agent response and ignores malformed edit payloads safely
+- **`src/lib/ai/prompts.ts`** — Agent prompt context
+  - Adds presentation metadata to `AGENT_SYSTEM_PROMPT_TEMPLATE`
+  - Keeps numeric moment IDs aligned to storyboard positions while preserving database IDs in context
+- **`src/stores/agent.ts`** — Zustand chat store
+  - Stores user/agent messages with timestamps
+  - Tracks `isThinking`
+  - Provides `addMessage`, `setThinking`, `loadHistory`, and `clearHistory`
+- **`src/components/workspace/AgentSidebar.tsx`** — Workspace co-director UI
+  - Fixed 260px desktop sidebar with header status, active moment indicator, scrollable messages, thinking bubble, input, and send button
+  - Loads conversation history on mount
+  - Sends chat messages through tRPC and applies returned moment edits into the presentation store
+- **`src/components/workspace/WorkspaceClient.tsx`** — Workspace wiring
+  - Replaces the placeholder agent panel with the live `AgentSidebar`
+  - Reserves desktop content space for the fixed sidebar
+- **Validation:**
+  - `npx tsc --noEmit --pretty false` passed
+  - `git diff --check` passed
+  - `npm run build` passed
+  - Parser smoke test extracted script and slide edits correctly
+  - Authenticated workspace rendered with the new **Co-director** sidebar visible
+  - Live no-edit agent ping returned `OK` after correcting the Haiku model ID
+
+---
+
 ## Known Issues
 - `/prototype` page has broken import (`@/../../deckbuddy-reimagined`)
+- Rehearse is intentionally disabled/coming soon
+- Export button is present in the workspace top bar but PPTX export UI is not wired yet
 - Turbopack persistent cache can serve stale server code on file edits (workaround: restart dev server)
 - Anthropic warned `claude-sonnet-4-20250514` is deprecated and reaches end-of-life on June 15, 2026
 - Next.js warns the `middleware` file convention is deprecated and should eventually migrate to `proxy`

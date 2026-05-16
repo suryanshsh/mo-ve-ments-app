@@ -4,6 +4,7 @@ export { anthropic } from './client'
 export { agentChat, type AgentChatMessage } from './agent'
 export { generateMoments } from './generate'
 export { logApiCall } from './cost-logger'
+export { parseAgentEdits, type AgentEdit } from './edit-parser'
 export {
   AGENT_SYSTEM_PROMPT_TEMPLATE,
   GENERATION_SYSTEM_PROMPT,

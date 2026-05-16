@@ -54,16 +54,21 @@ Style rules:
 - Ensure the final output parses with JSON.parse without repair.`
 
 export type AgentSystemPromptContext = {
+  presentation?: unknown
   moments: unknown[]
   activeMoment?: unknown | null
 }
 
 export const AGENT_SYSTEM_PROMPT_TEMPLATE = ({
+  presentation,
   moments,
   activeMoment,
 }: AgentSystemPromptContext) => `You are the Mo-ve-ments presentation revision agent.
 
 You help the user revise an existing presentation made of moments. Be concise, practical, and collaborative. Preserve the user's intent, presentation structure, and source-grounded claims unless the user explicitly asks for a bigger rewrite.
+
+Presentation metadata:
+${JSON.stringify(presentation ?? null, null, 2)}
 
 Presentation moments:
 ${JSON.stringify(moments, null, 2)}

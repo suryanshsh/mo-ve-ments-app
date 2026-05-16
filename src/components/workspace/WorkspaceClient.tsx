@@ -12,6 +12,7 @@ import {
   type PresentationSummary,
   type SourceCitation,
 } from '@/stores/presentation'
+import AgentSidebar from './AgentSidebar'
 import ArcBar from './ArcBar'
 import MomentList from './MomentList'
 import TopBar from './TopBar'
@@ -238,52 +239,17 @@ function DraftWorkspace({
   )
 }
 
-function AgentSidebarPlaceholder() {
-  const moments = usePresentationStore((state) => state.moments)
-  const activeMomentIndex = usePresentationStore((state) => state.activeMomentIndex)
-  const activeMoment = activeMomentIndex !== null ? moments[activeMomentIndex] : null
-
-  return (
-    <aside className="h-fit rounded-xl border border-border bg-surface shadow-sm lg:sticky lg:top-[132px]">
-      <div className="border-b border-border px-5 py-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textLight">Agent</p>
-        <h2 className="mt-1 font-serif text-2xl text-text">AI co-director</h2>
-      </div>
-      <div className="space-y-4 p-5">
-        <div className="rounded-xl bg-bgAlt p-4">
-          <p className="text-sm leading-6 text-textMid">
-            {activeMoment
-              ? `Focused on “${activeMoment.title}”.`
-              : 'Select a moment to focus the conversation.'}
-          </p>
-        </div>
-        <div className="min-h-[260px] rounded-xl border border-border-light bg-bg p-4" />
-        <div className="flex items-center gap-2 rounded-[12px] border border-border bg-bg px-3 py-2.5">
-          <span className="flex-1 text-sm text-textLight">Ask for a revision…</span>
-          <button
-            type="button"
-            disabled
-            className="rounded-[9px] bg-border px-3 py-1.5 text-xs font-semibold text-textLight disabled:cursor-not-allowed"
-          >
-            Send
-          </button>
-        </div>
-      </div>
-    </aside>
-  )
-}
-
-function WorkspaceShell() {
+function WorkspaceShell({ presentationId }: { presentationId: string }) {
   return (
     <main className="min-h-screen bg-bg">
       <TopBar />
       <ArcBar />
-      <section className="mx-auto max-w-[1440px] px-5 py-8 lg:px-8">
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.85fr)_minmax(320px,1fr)]">
+      <section className="mx-auto max-w-[1440px] px-5 py-8 lg:pl-8 lg:pr-[284px]">
+        <div className="grid gap-6">
           <MomentList />
-          <AgentSidebarPlaceholder />
         </div>
       </section>
+      <AgentSidebar presentationId={presentationId} />
       <Toast />
     </main>
   )
@@ -384,5 +350,5 @@ export default function WorkspaceClient({ presentationId }: { presentationId: st
     )
   }
 
-  return <WorkspaceShell />
+  return <WorkspaceShell presentationId={presentationId} />
 }

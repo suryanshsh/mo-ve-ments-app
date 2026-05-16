@@ -5,7 +5,7 @@ import type { MessageParam, MessageStreamEvent } from '@anthropic-ai/sdk/resourc
 
 import { anthropic } from './client'
 
-const AGENT_MODEL = 'claude-haiku-4-5-20250414'
+const AGENT_MODEL = process.env.ANTHROPIC_AGENT_MODEL ?? 'claude-haiku-4-5-20251001'
 const RETRY_DELAY_MS = 1000
 
 export type AgentChatMessage = {
