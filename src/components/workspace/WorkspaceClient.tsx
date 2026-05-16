@@ -1,8 +1,18 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { trpc } from '@/lib/trpc/client'
 import { FileUploadZone } from '@/components/document/FileUploadZone'
+import { trpc } from '@/lib/trpc/client'
+import type { MomentEmotion } from '@/lib/supabase/types'
+import {
+  usePresentationStore,
+  type PresentationMoment,
+  type PresentationSummary,
+  type SourceCitation,
+} from '@/stores/presentation'
+import ArcBar from './ArcBar'
+import MomentList from './MomentList'
+import TopBar from './TopBar'
 
 const PROGRESS_MESSAGES = [
   'Reading your sources…',
@@ -11,29 +21,114 @@ const PROGRESS_MESSAGES = [
   'Writing your scripts…',
 ]
 
-type WorkspaceMoment = {
+const VALID_EMOTIONS: MomentEmotion[] = ['hook', 'empathy', 'build', 'reveal', 'proof', 'close']
+
+type WorkspaceMomentRecord = {
   id: string
+  presentation_id?: string | null
   position: number
   title: string
   emotion: string
   duration_seconds: number
   slide_heading: string | null
-  slide_bullets: string[] | null
+  slide_bullets: unknown
   script: string
-  sources: unknown[] | null
-  _warning?: string
+  sources: unknown
+  created_at?: string
+  updated_at?: string
+  _warning?: unknown
+  _sourceVerification?: unknown
 }
 
-type WorkspacePresentation = {
+type WorkspacePresentationRecord = {
   id: string
   title: string
   audience: string | null
   target_duration: string | null
   total_duration: string | null
   status: string
-  tips: string[] | null
-  moments: WorkspaceMoment[]
+  tips?: string[] | null
+  created_at?: string
+  updated_at?: string
+  moments?: WorkspaceMomentRecord[]
 }
+
+const normalizeEmotion = (emotion: string): MomentEmotion => {
+  if (VALID_EMOTIONS.includes(emotion as MomentEmotion)) {
+    return emotion as MomentEmotion
+  }
+
+  return 'build'
+}
+
+const normalizeStringArray = (value: unknown) => {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string')
+}
+
+const normalizeSources = (value: unknown): SourceCitation[] => {
+  if (!Array.isArray(value)) return []
+
+  const sources: SourceCitation[] = []
+
+  for (const item of value) {
+    if (typeof item === 'string' && item.trim()) {
+      sources.push(item.trim())
+    } else if (typeof item === 'object' && item !== null) {
+      sources.push(item as Record<string, unknown>)
+    }
+  }
+
+  return sources
+}
+
+const normalizeVerification = (value: unknown): PresentationMoment['_sourceVerification'] => {
+  if (typeof value !== 'object' || value === null) return undefined
+
+  const record = value as Record<string, unknown>
+  const verified = typeof record.verified === 'boolean' ? record.verified : false
+  const verifiedSources = normalizeStringArray(record.verifiedSources)
+
+  return { verified, verifiedSources }
+}
+
+const normalizeMoment = (
+  moment: WorkspaceMomentRecord,
+  presentationId: string,
+  fallbackPosition: number
+): PresentationMoment => {
+  const duration = Number(moment.duration_seconds)
+  const position = Number(moment.position)
+
+  return {
+    id: moment.id,
+    presentation_id: moment.presentation_id ?? presentationId,
+    position: Number.isFinite(position) && position > 0 ? position : fallbackPosition,
+    title: moment.title || `Moment ${fallbackPosition}`,
+    emotion: normalizeEmotion(moment.emotion),
+    duration_seconds: Number.isFinite(duration) && duration > 0 ? duration : 60,
+    slide_heading: typeof moment.slide_heading === 'string' ? moment.slide_heading : null,
+    slide_bullets: normalizeStringArray(moment.slide_bullets),
+    script: typeof moment.script === 'string' ? moment.script : '',
+    sources: normalizeSources(moment.sources),
+    created_at: moment.created_at,
+    updated_at: moment.updated_at,
+    _warning: typeof moment._warning === 'string' ? moment._warning : undefined,
+    _sourceVerification: normalizeVerification(moment._sourceVerification),
+  }
+}
+
+const toPresentationSummary = (presentation: WorkspacePresentationRecord): PresentationSummary => ({
+  id: presentation.id,
+  title: presentation.title,
+  audience: presentation.audience,
+  target_duration: presentation.target_duration,
+  total_duration: presentation.total_duration,
+  status: presentation.status,
+  tips: presentation.tips,
+  created_at: presentation.created_at,
+  updated_at: presentation.updated_at,
+})
 
 function useProgressMessage(active: boolean) {
   const [index, setIndex] = useState(0)
@@ -54,126 +149,150 @@ function useProgressMessage(active: boolean) {
   return PROGRESS_MESSAGES[index]
 }
 
-function formatDuration(seconds: number) {
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-
-  if (minutes === 0) return `${remainingSeconds}s`
-  if (remainingSeconds === 0) return `${minutes}m`
-  return `${minutes}m ${remainingSeconds}s`
-}
-
-function sourceLabel(source: unknown) {
-  if (typeof source === 'string') return source
-
-  if (typeof source === 'object' && source !== null) {
-    const record = source as Record<string, unknown>
-    const filename = typeof record.filename === 'string' ? record.filename : ''
-    const reference = typeof record.reference === 'string' ? record.reference : ''
-    const label = typeof record.label === 'string' ? record.label : ''
-    return [filename, reference, label].filter(Boolean).join(' ')
-  }
-
-  return ''
+function LoadingState() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-bg">
+      <div className="h-8 w-8 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+    </main>
+  )
 }
 
 function GenerationProgress({ message }: { message: string }) {
   return (
-    <div className="min-h-[70vh] flex items-center justify-center px-6">
-      <div className="text-center max-w-sm">
-        <div className="w-12 h-12 mx-auto mb-5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-        <h1 className="font-serif text-3xl text-text mb-2">Generating moments</h1>
-        <p className="text-textMid animate-pulse">{message}</p>
+    <main className="min-h-screen bg-bg">
+      <div className="flex min-h-[70vh] items-center justify-center px-6">
+        <div className="max-w-sm text-center">
+          <div className="mx-auto mb-5 h-12 w-12 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+          <h1 className="mb-2 font-serif text-3xl text-text">Generating moments</h1>
+          <p className="text-textMid animate-pulse">{message}</p>
+        </div>
       </div>
-    </div>
+    </main>
   )
 }
 
 function ErrorState({ onRetry, isRetrying }: { onRetry: () => void; isRetrying: boolean }) {
   return (
-    <div className="min-h-[70vh] flex items-center justify-center px-6">
-      <div className="bg-surface border border-border rounded-xl p-6 max-w-md text-center shadow-sm">
-        <h1 className="font-serif text-2xl text-text mb-2">Generation hit a snag</h1>
-        <p className="text-sm text-textMid mb-5">
-          We could not generate your moments just now. Your presentation and uploaded files are still saved.
+    <main className="flex min-h-screen items-center justify-center bg-bg px-6">
+      <div className="max-w-md rounded-xl border border-border bg-surface p-6 text-center shadow-sm">
+        <h1 className="mb-2 font-serif text-2xl text-text">Workspace unavailable</h1>
+        <p className="mb-5 text-sm leading-6 text-textMid">
+          We could not load this presentation just now. Your dashboard is still available.
         </p>
         <button
+          type="button"
           onClick={onRetry}
           disabled={isRetrying}
-          className="px-4 py-2.5 rounded-[10px] bg-accent text-white font-medium text-sm hover:bg-accent/90 transition-colors disabled:opacity-50"
+          className="rounded-[10px] bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isRetrying ? 'Trying again…' : 'Try again'}
         </button>
       </div>
-    </div>
+    </main>
   )
 }
 
-function MomentCard({ moment }: { moment: WorkspaceMoment }) {
-  const sources = (moment.sources ?? []).map(sourceLabel).filter(Boolean)
+function DraftWorkspace({
+  presentationId,
+  onGenerate,
+  isGenerating,
+}: {
+  presentationId: string
+  onGenerate: () => void
+  isGenerating: boolean
+}) {
+  return (
+    <main className="min-h-screen bg-bg">
+      <TopBar />
+      <ArcBar />
+      <section className="mx-auto max-w-5xl px-5 py-10 lg:px-8">
+        <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+            <h2 className="font-serif text-2xl text-text">Source documents</h2>
+            <p className="mt-2 mb-5 text-sm leading-6 text-textMid">
+              Add PDFs, docs, notes, or research files before generating the first storyboard.
+            </p>
+            <FileUploadZone presentationId={presentationId} />
+          </div>
+
+          <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-textLight">Draft</span>
+            <h2 className="mt-4 font-serif text-3xl leading-tight text-text">Ready to shape the narrative</h2>
+            <p className="mt-3 text-sm leading-6 text-textMid">
+              Generate the first set of moments when your brief and source files are ready.
+            </p>
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={isGenerating}
+              className="mt-6 w-full rounded-[10px] bg-accent px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isGenerating ? 'Generating…' : 'Generate moments'}
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+  )
+}
+
+function AgentSidebarPlaceholder() {
+  const moments = usePresentationStore((state) => state.moments)
+  const activeMomentIndex = usePresentationStore((state) => state.activeMomentIndex)
+  const activeMoment = activeMomentIndex !== null ? moments[activeMomentIndex] : null
 
   return (
-    <article className="bg-surface border border-border rounded-xl p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs text-textLight">Moment {moment.position}</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-accent-soft text-accent-text capitalize">
-              {moment.emotion}
-            </span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-bgAlt text-textMid">
-              {formatDuration(moment.duration_seconds)}
-            </span>
-          </div>
-          <h2 className="font-serif text-2xl text-text">{moment.title}</h2>
+    <aside className="h-fit rounded-xl border border-border bg-surface shadow-sm lg:sticky lg:top-[132px]">
+      <div className="border-b border-border px-5 py-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textLight">Agent</p>
+        <h2 className="mt-1 font-serif text-2xl text-text">AI co-director</h2>
+      </div>
+      <div className="space-y-4 p-5">
+        <div className="rounded-xl bg-bgAlt p-4">
+          <p className="text-sm leading-6 text-textMid">
+            {activeMoment
+              ? `Focused on “${activeMoment.title}”.`
+              : 'Select a moment to focus the conversation.'}
+          </p>
+        </div>
+        <div className="min-h-[260px] rounded-xl border border-border-light bg-bg p-4" />
+        <div className="flex items-center gap-2 rounded-[12px] border border-border bg-bg px-3 py-2.5">
+          <span className="flex-1 text-sm text-textLight">Ask for a revision…</span>
+          <button
+            type="button"
+            disabled
+            className="rounded-[9px] bg-border px-3 py-1.5 text-xs font-semibold text-textLight disabled:cursor-not-allowed"
+          >
+            Send
+          </button>
         </div>
       </div>
+    </aside>
+  )
+}
 
-      {moment._warning && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          {moment._warning}
+function WorkspaceShell() {
+  return (
+    <main className="min-h-screen bg-bg">
+      <TopBar />
+      <ArcBar />
+      <section className="mx-auto max-w-[1440px] px-5 py-8 lg:px-8">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.85fr)_minmax(320px,1fr)]">
+          <MomentList />
+          <AgentSidebarPlaceholder />
         </div>
-      )}
-
-      <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
-        <section>
-          <p className="text-xs font-semibold uppercase tracking-wide text-textLight mb-2">Slide</p>
-          <div className="rounded-lg border border-border-light bg-bg p-4">
-            <h3 className="font-medium text-text mb-3">{moment.slide_heading}</h3>
-            {moment.slide_bullets && moment.slide_bullets.length > 0 && (
-              <ul className="space-y-2 text-sm text-textMid">
-                {moment.slide_bullets.map((bullet) => (
-                  <li key={bullet} className="flex gap-2">
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-                    <span>{bullet}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-
-        <section>
-          <p className="text-xs font-semibold uppercase tracking-wide text-textLight mb-2">Script</p>
-          <p className="text-sm leading-7 text-textMid whitespace-pre-wrap">{moment.script}</p>
-        </section>
-      </div>
-
-      {sources.length > 0 && (
-        <div className="mt-5 flex flex-wrap gap-2">
-          {sources.map((source) => (
-            <span key={source} className="text-xs px-2.5 py-1 rounded-full bg-bgAlt text-textMid">
-              {source}
-            </span>
-          ))}
-        </div>
-      )}
-    </article>
+      </section>
+    </main>
   )
 }
 
 export default function WorkspaceClient({ presentationId }: { presentationId: string }) {
   const [generationFailed, setGenerationFailed] = useState(false)
+  const [hydratedPresentationId, setHydratedPresentationId] = useState<string | null>(null)
+  const setPresentation = usePresentationStore((state) => state.setPresentation)
+  const setMoments = usePresentationStore((state) => state.setMoments)
+  const setActiveMoment = usePresentationStore((state) => state.setActiveMoment)
+
   const presentationQuery = trpc.presentation.getById.useQuery({ id: presentationId })
   const generationMutation = trpc.generation.create.useMutation({
     onSuccess: async () => {
@@ -183,12 +302,27 @@ export default function WorkspaceClient({ presentationId }: { presentationId: st
     onError: () => setGenerationFailed(true),
   })
   const progressMessage = useProgressMessage(generationMutation.isPending)
-  const presentation = presentationQuery.data as WorkspacePresentation | undefined
-  const moments = useMemo(
-    () => [...(presentation?.moments ?? [])].sort((a, b) => a.position - b.position),
-    [presentation?.moments]
-  )
-  const shouldShowGenerate = presentation?.status === 'draft' || moments.length === 0
+
+  const normalizedWorkspace = useMemo(() => {
+    const presentation = presentationQuery.data as WorkspacePresentationRecord | undefined
+    if (!presentation) return null
+
+    return {
+      presentation: toPresentationSummary(presentation),
+      moments: [...(presentation.moments ?? [])]
+        .sort((first, second) => first.position - second.position)
+        .map((moment, index) => normalizeMoment(moment, presentation.id, index + 1)),
+    }
+  }, [presentationQuery.data])
+
+  useEffect(() => {
+    if (!normalizedWorkspace) return
+
+    setPresentation(normalizedWorkspace.presentation)
+    setMoments(normalizedWorkspace.moments)
+    setActiveMoment(null)
+    setHydratedPresentationId(normalizedWorkspace.presentation.id)
+  }, [normalizedWorkspace, setActiveMoment, setMoments, setPresentation])
 
   const handleGenerate = () => {
     setGenerationFailed(false)
@@ -196,107 +330,36 @@ export default function WorkspaceClient({ presentationId }: { presentationId: st
   }
 
   if (presentationQuery.isLoading) {
-    return (
-      <main className="min-h-screen bg-bg flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-      </main>
-    )
+    return <LoadingState />
   }
 
-  if (presentationQuery.isError || !presentation) {
-    return (
-      <main className="min-h-screen bg-bg flex items-center justify-center px-6">
-        <div className="bg-surface border border-border rounded-xl p-6 max-w-md text-center shadow-sm">
-          <h1 className="font-serif text-2xl text-text mb-2">Presentation unavailable</h1>
-          <p className="text-sm text-textMid">We could not load this workspace. Please return to the dashboard and try again.</p>
-        </div>
-      </main>
-    )
+  if (presentationQuery.isError || !normalizedWorkspace) {
+    return <ErrorState onRetry={() => presentationQuery.refetch()} isRetrying={presentationQuery.isFetching} />
   }
 
   if (generationMutation.isPending) {
-    return <main className="min-h-screen bg-bg"><GenerationProgress message={progressMessage} /></main>
+    return <GenerationProgress message={progressMessage} />
   }
 
   if (generationFailed) {
+    return <ErrorState onRetry={handleGenerate} isRetrying={generationMutation.isPending} />
+  }
+
+  if (hydratedPresentationId !== normalizedWorkspace.presentation.id) {
+    return <LoadingState />
+  }
+
+  const shouldShowGenerate = normalizedWorkspace.presentation.status === 'draft' || normalizedWorkspace.moments.length === 0
+
+  if (shouldShowGenerate) {
     return (
-      <main className="min-h-screen bg-bg">
-        <ErrorState onRetry={handleGenerate} isRetrying={generationMutation.isPending} />
-      </main>
+      <DraftWorkspace
+        presentationId={presentationId}
+        onGenerate={handleGenerate}
+        isGenerating={generationMutation.isPending}
+      />
     )
   }
 
-  return (
-    <main className="min-h-screen bg-bg">
-      <header className="border-b border-border bg-surface">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <a href="/dashboard" className="text-sm text-textMid hover:text-text transition-colors">
-              ← Dashboard
-            </a>
-            <h1 className="font-serif text-3xl text-text mt-2">{presentation.title}</h1>
-            <div className="flex flex-wrap gap-2 mt-3">
-              {presentation.audience && (
-                <span className="text-xs px-2.5 py-1 rounded-full bg-bgAlt text-textMid">
-                  {presentation.audience}
-                </span>
-              )}
-              {presentation.target_duration && (
-                <span className="text-xs px-2.5 py-1 rounded-full bg-bgAlt text-textMid">
-                  Target: {presentation.target_duration}
-                </span>
-              )}
-              {presentation.total_duration && (
-                <span className="text-xs px-2.5 py-1 rounded-full bg-bgAlt text-textMid">
-                  Generated: {presentation.total_duration}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {shouldShowGenerate && (
-            <button
-              onClick={handleGenerate}
-              disabled={generationMutation.isPending}
-              className="px-4 py-2.5 rounded-[10px] bg-accent text-white font-medium text-sm hover:bg-accent/90 transition-colors disabled:opacity-50"
-            >
-              Generate
-            </button>
-          )}
-        </div>
-      </header>
-
-      {shouldShowGenerate ? (
-        <section className="max-w-3xl mx-auto px-6 py-12 space-y-6">
-          <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
-            <h2 className="font-serif text-2xl text-text mb-2">Source documents</h2>
-            <p className="text-sm text-textMid mb-5">
-              Upload PDFs, docs, notes, or research files before generating your moments.
-            </p>
-            <FileUploadZone presentationId={presentation.id} />
-          </div>
-
-          <div className="bg-surface border border-border rounded-xl p-6 text-center shadow-sm">
-            <h2 className="font-serif text-3xl text-text mb-3">Ready to shape the narrative</h2>
-            <p className="text-textMid mb-6">
-              Generate the first set of moments when your presentation brief and source files are ready.
-            </p>
-            <button
-              onClick={handleGenerate}
-              disabled={generationMutation.isPending}
-              className="px-5 py-3 rounded-[10px] bg-accent text-white font-medium hover:bg-accent/90 transition-colors disabled:opacity-50"
-            >
-              Generate moments
-            </button>
-          </div>
-        </section>
-      ) : (
-        <section className="max-w-6xl mx-auto px-6 py-8 space-y-4">
-          {moments.map((moment) => (
-            <MomentCard key={moment.id} moment={moment} />
-          ))}
-        </section>
-      )}
-    </main>
-  )
+  return <WorkspaceShell />
 }
