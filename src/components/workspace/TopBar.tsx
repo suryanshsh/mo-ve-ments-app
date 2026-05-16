@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import SaveIndicator from '@/components/ui/SaveIndicator'
 import { usePresentationStore } from '@/stores/presentation'
 
 const formatDuration = (seconds: number) => {
@@ -13,12 +14,11 @@ const formatDuration = (seconds: number) => {
 }
 
 export default function TopBar() {
-  const { presentation, moments, isSaving, lastSavedAt } = usePresentationStore()
+  const { presentation, moments } = usePresentationStore()
   const totalSeconds = moments.reduce((sum, moment) => sum + moment.duration_seconds, 0)
   const totalDuration = presentation?.total_duration ?? formatDuration(totalSeconds)
   const title = presentation?.title ?? 'Untitled presentation'
   const audience = presentation?.audience ?? 'General audience'
-  const savedLabel = isSaving ? 'Saving…' : lastSavedAt ? 'Saved' : 'Saved'
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
@@ -35,10 +35,7 @@ export default function TopBar() {
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-3">
               <h1 className="truncate font-serif text-[18px] leading-6 text-text">{title}</h1>
-              <span className="hidden items-center gap-1.5 text-xs text-textLight sm:inline-flex">
-                <span className={`h-1.5 w-1.5 rounded-full ${isSaving ? 'bg-amber-500' : 'bg-[#2A8C5E]'}`} />
-                {savedLabel}
-              </span>
+              <SaveIndicator />
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-2">

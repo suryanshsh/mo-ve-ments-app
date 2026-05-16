@@ -43,6 +43,8 @@ interface PresentationState {
   activeMomentIndex: number | null
   isSaving: boolean
   lastSavedAt: Date | null
+  saveError: string | null
+  dirtyMomentIds: Set<string>
   setPresentation: (presentation: PresentationSummary | null) => void
   setMoments: (moments: PresentationMoment[]) => void
   setActiveMoment: (index: number | null) => void
@@ -50,7 +52,10 @@ interface PresentationState {
   addMoment: (moment: PresentationMoment) => void
   deleteMoment: (id: string) => void
   reorderMoments: (orderedMoments: PresentationMoment[] | string[]) => void
+  markMomentDirty: (id: string) => void
+  clearDirtyMoments: (ids?: string[]) => void
   setSaving: (isSaving: boolean) => void
+  setSaveError: (error: string | null) => void
   markSaved: (savedAt?: Date) => void
 }
 
@@ -66,12 +71,15 @@ export const usePresentationStore = create<PresentationState>((set) => ({
   activeMomentIndex: null,
   isSaving: false,
   lastSavedAt: null,
+  saveError: null,
+  dirtyMomentIds: new Set<string>(),
 
   setPresentation: (presentation) =>
     set({
       presentation,
       isSaving: false,
       lastSavedAt: presentation ? new Date() : null,
+      saveError: null,
     }),
 
   setMoments: (moments) =>
@@ -90,13 +98,19 @@ export const usePresentationStore = create<PresentationState>((set) => ({
     })),
 
   updateMoment: (id, update) =>
-    set((state) => ({
-      moments: state.moments.map((moment) =>
-        moment.id === id ? { ...moment, ...update, id: moment.id } : moment
-      ),
-      isSaving: false,
-      lastSavedAt: new Date(),
-    })),
+    set((state) => {
+      const dirtyMomentIds = new Set(state.dirtyMomentIds)
+      dirtyMomentIds.add(id)
+
+      return {
+        moments: state.moments.map((moment) =>
+          moment.id === id ? { ...moment, ...update, id: moment.id } : moment
+        ),
+        dirtyMomentIds,
+        isSaving: true,
+        saveError: null,
+      }
+    }),
 
   addMoment: (moment) =>
     set((state) => ({
@@ -120,7 +134,7 @@ export const usePresentationStore = create<PresentationState>((set) => ({
   reorderMoments: (orderedMoments) =>
     set((state) => {
       if (orderedMoments.length === 0) {
-        return { moments: [], activeMomentIndex: null, lastSavedAt: new Date() }
+        return { moments: [], activeMomentIndex: null }
       }
 
       const nextMoments = typeof orderedMoments[0] === 'string'
@@ -129,18 +143,59 @@ export const usePresentationStore = create<PresentationState>((set) => ({
             .filter((moment): moment is PresentationMoment => Boolean(moment))
         : (orderedMoments as PresentationMoment[])
 
+      const moments = reindexMoments(nextMoments)
+      const dirtyMomentIds = new Set(state.dirtyMomentIds)
+      moments.forEach((moment) => dirtyMomentIds.add(moment.id))
+
       return {
-        moments: reindexMoments(nextMoments),
+        moments,
+        dirtyMomentIds,
         activeMomentIndex: null,
-        lastSavedAt: new Date(),
+        isSaving: true,
+        saveError: null,
       }
     }),
 
-  setSaving: (isSaving) => set({ isSaving }),
+  markMomentDirty: (id) =>
+    set((state) => {
+      const dirtyMomentIds = new Set(state.dirtyMomentIds)
+      dirtyMomentIds.add(id)
+
+      return {
+        dirtyMomentIds,
+        isSaving: true,
+        saveError: null,
+      }
+    }),
+
+  clearDirtyMoments: (ids) =>
+    set((state) => {
+      if (!ids) {
+        return { dirtyMomentIds: new Set<string>() }
+      }
+
+      const dirtyMomentIds = new Set(state.dirtyMomentIds)
+      ids.forEach((id) => dirtyMomentIds.delete(id))
+
+      return { dirtyMomentIds }
+    }),
+
+  setSaving: (isSaving) =>
+    set((state) => ({
+      isSaving,
+      saveError: isSaving ? null : state.saveError,
+    })),
+
+  setSaveError: (error) =>
+    set({
+      saveError: error,
+      isSaving: false,
+    }),
 
   markSaved: (savedAt = new Date()) =>
     set({
       isSaving: false,
       lastSavedAt: savedAt,
+      saveError: null,
     }),
 }))

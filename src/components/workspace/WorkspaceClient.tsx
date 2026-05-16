@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { FileUploadZone } from '@/components/document/FileUploadZone'
+import Toast from '@/components/ui/Toast'
+import { useAutosave } from '@/hooks/useAutosave'
 import { trpc } from '@/lib/trpc/client'
 import type { MomentEmotion } from '@/lib/supabase/types'
 import {
@@ -282,16 +284,21 @@ function WorkspaceShell() {
           <AgentSidebarPlaceholder />
         </div>
       </section>
+      <Toast />
     </main>
   )
 }
 
 export default function WorkspaceClient({ presentationId }: { presentationId: string }) {
+  useAutosave()
+
   const [generationFailed, setGenerationFailed] = useState(false)
   const [hydratedPresentationId, setHydratedPresentationId] = useState<string | null>(null)
   const setPresentation = usePresentationStore((state) => state.setPresentation)
   const setMoments = usePresentationStore((state) => state.setMoments)
   const setActiveMoment = usePresentationStore((state) => state.setActiveMoment)
+  const hasDirtyMoments = usePresentationStore((state) => state.dirtyMomentIds.size > 0)
+  const localMomentCount = usePresentationStore((state) => state.moments.length)
 
   const presentationQuery = trpc.presentation.getById.useQuery({ id: presentationId })
   const generationMutation = trpc.generation.create.useMutation({
@@ -319,10 +326,26 @@ export default function WorkspaceClient({ presentationId }: { presentationId: st
     if (!normalizedWorkspace) return
 
     setPresentation(normalizedWorkspace.presentation)
-    setMoments(normalizedWorkspace.moments)
-    setActiveMoment(null)
+
+    const shouldHydrateMoments =
+      hydratedPresentationId !== normalizedWorkspace.presentation.id ||
+      (!hasDirtyMoments && localMomentCount === 0 && normalizedWorkspace.moments.length > 0)
+
+    if (shouldHydrateMoments) {
+      setMoments(normalizedWorkspace.moments)
+      setActiveMoment(null)
+    }
+
     setHydratedPresentationId(normalizedWorkspace.presentation.id)
-  }, [normalizedWorkspace, setActiveMoment, setMoments, setPresentation])
+  }, [
+    hasDirtyMoments,
+    hydratedPresentationId,
+    localMomentCount,
+    normalizedWorkspace,
+    setActiveMoment,
+    setMoments,
+    setPresentation,
+  ])
 
   const handleGenerate = () => {
     setGenerationFailed(false)
