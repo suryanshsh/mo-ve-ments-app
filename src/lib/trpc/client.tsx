@@ -29,6 +29,7 @@ export const trpc = createTRPCReact<AppRouter>({
   overrides: {
     useMutation: {
       async onSuccess(opts) {
+        await opts.originalFn()
         await opts.queryClient.invalidateQueries()
       },
     },

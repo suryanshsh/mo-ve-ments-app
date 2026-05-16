@@ -100,7 +100,72 @@
 
 ---
 
+## Phase 9: Anthropic API Wrapper
+**Commit:** `0a745a8` — added anthropic sdk wrapper
+
+- **Packages added:** `server-only`, `tsx`
+- **`src/lib/ai/client.ts`** — Server-only Anthropic client
+  - Uses `ANTHROPIC_API_KEY`
+  - Disables SDK retries so wrapper-level retry behavior is explicit
+  - Uses string API key initialization; async API key setter type-checks in SDK `0.96.0` but does not authenticate at runtime
+- **`src/lib/ai/generate.ts`** — Streaming generation wrapper
+  - `generateMoments(prompt)` calls Claude Sonnet (`claude-sonnet-4-20250514`)
+  - Streams text chunks as they arrive
+  - Retries once after 1 second for `429` or `500` before any text is yielded
+  - Sends generation system prompt as a cacheable prompt block
+- **`src/lib/ai/agent.ts`** — Streaming agent chat wrapper
+  - `agentChat(systemPrompt, messages)` calls Claude Haiku (`claude-haiku-4-5-20250414`)
+  - Streams text chunks as they arrive
+  - Uses same one-retry behavior for `429` or `500`
+- **`src/lib/ai/prompts.ts`** — Prompt templates
+  - Generation prompt returns valid JSON moments only
+  - Agent prompt template supports `<newscript>` and `<newslide>` edit tags
+- **`src/lib/ai/cost-logger.ts`** — Development cost logger and production analytics stub
+- **`src/lib/ai/index.ts`** — Barrel exports for AI utilities
+- **`scripts/test-ai-wrapper.ts`** — Smoke test script
+  - `npm run test:ai -- retry`: forced mocked `500` verified retry once for generation and agent
+  - `npm run test:ai -- stream`: real Sonnet generation streamed 28 chunks, 2488 chars, parsed 5 JSON moments
+- **Validation:** `npx tsc --noEmit --pretty false` passed
+
+---
+
+## Phase 10: Moment Generation Pipeline *(In Progress — uncommitted)*
+
+- **`src/modules/generation/router.ts`** — Core generation tRPC router
+  - `create`: Fetches presentation context and source documents, checks daily plan limits (`free=3`, `pro=50`, `team=50`), assembles the generation prompt, streams and collects `generateMoments(prompt)`, strips markdown fences, parses/validates JSON, replaces existing moments, updates presentation status/duration/tips, increments generation count, and returns created moments
+  - `regenerateOne`: Regenerates a single moment with an instruction and updates only that moment
+  - Handles generation failures with a user-safe `TRPCError` message instead of exposing raw API errors
+- **`src/modules/generation/source-verifier.ts`** — Source citation verification helper
+  - Checks cited filenames against uploaded `source_documents`
+  - Uses simple phrase matching on numbers, quoted text, and proper nouns from scripts
+  - Adds `_warning` and `_sourceVerification` metadata when citations cannot be verified
+- **`src/app/workspace/[id]/page.tsx`** — Workspace route updated for Next.js 16
+  - Uses async `params` with `await params`
+  - Renders the new client workspace shell
+- **`src/components/workspace/WorkspaceClient.tsx`** — Workspace generation UI
+  - Fetches presentation and moments via `presentation.getById`
+  - Shows draft workspace upload area with `FileUploadZone`
+  - Shows Generate button, animated generation progress messages, graceful retry state, and generated moment cards
+- **`src/components/presentation/CreateModal.tsx`** — Create-to-generate flow
+  - After presentation creation, modal stays open and switches to **Add source documents**
+  - Shows `FileUploadZone`, upload chips, **Generate my moments**, progress messages, and friendly retry errors
+  - Redirects to workspace after generation completes
+- **`src/lib/trpc/client.tsx`** — Mutation callback fix
+  - Global mutation override now calls `opts.originalFn()` before invalidating queries
+  - Fixes create modal not switching to the upload step after `presentation.create` succeeds
+- **Validation:**
+  - `npx tsc --noEmit --pretty false` passed
+  - `git diff --check` passed
+  - `npm run build` passed after clearing stale `.next` output and safe local caches (`~/.cache/huggingface`, `~/.npm/_cacache`)
+  - Dev server restarted and verified at `http://localhost:3000`
+- **Manual testing notes:**
+  - Create modal flow now advances from presentation details to **Add source documents**
+  - Draft workspace also shows source upload before generation, so skipped modal uploads can be recovered
+
+---
+
 ## Known Issues
 - `/prototype` page has broken import (`@/../../deckbuddy-reimagined`)
-- `/workspace/[id]` uses sync `params.id` — needs `await params` (Next.js 16 breaking change)
 - Turbopack persistent cache can serve stale server code on file edits (workaround: restart dev server)
+- Anthropic warned `claude-sonnet-4-20250514` is deprecated and reaches end-of-life on June 15, 2026
+- Next.js warns the `middleware` file convention is deprecated and should eventually migrate to `proxy`
