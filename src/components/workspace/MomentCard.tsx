@@ -2,9 +2,11 @@
 
 import { useEffect, useState, type CSSProperties } from 'react'
 import type { MomentEmotion } from '@/lib/supabase/types'
-import type { PresentationMoment, SourceCitation } from '@/stores/presentation'
+import type { PresentationMoment } from '@/stores/presentation'
+import SourceBadge from './SourceBadge'
 import SlideEditor from './SlideEditor'
 import ScriptEditor from './ScriptEditor'
+import VerificationBadge from './VerificationBadge'
 
 const EMOTION_META: Record<MomentEmotion, { label: string; icon: string; color: string; bg: string }> = {
   hook: { label: 'Hook', icon: '↗', color: '#3A7BD5', bg: '#EBF2FC' },
@@ -31,17 +33,6 @@ const formatDuration = (seconds: number) => {
   if (minutes === 0) return `${remainingSeconds}s`
   if (remainingSeconds === 0) return `${minutes}m`
   return `${minutes}m ${remainingSeconds}s`
-}
-
-const sourceLabel = (source: SourceCitation) => {
-  if (typeof source === 'string') return source
-
-  const filename = typeof source.filename === 'string' ? source.filename : ''
-  const reference = typeof source.reference === 'string' ? source.reference : ''
-  const label = typeof source.label === 'string' ? source.label : ''
-  const page = typeof source.page === 'string' || typeof source.page === 'number' ? `p.${source.page}` : ''
-
-  return [filename, reference, label, page].filter(Boolean).join(' ')
 }
 
 function EmotionBadge({ emotion }: { emotion: MomentEmotion }) {
@@ -80,29 +71,67 @@ function MiniSlide({ moment }: { moment: PresentationMoment }) {
   )
 }
 
-function SourcePills({ sources, compact = false }: { sources: SourceCitation[]; compact?: boolean }) {
-  const labels = sources.map(sourceLabel).filter(Boolean)
+function SourceBadges({
+  moment,
+  compact = false,
+  maxVisible,
+}: {
+  moment: PresentationMoment
+  compact?: boolean
+  maxVisible?: number
+}) {
+  if (moment.sources.length === 0) return null
 
-  if (labels.length === 0) return null
+  const visibleSources = typeof maxVisible === 'number'
+    ? moment.sources.slice(0, maxVisible)
+    : moment.sources
+  const hiddenCount = moment.sources.length - visibleSources.length
 
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {labels.map((label, index) => (
-        <span
-          key={`${label}-${index}`}
-          className={`rounded-full border border-amber-200 bg-amber-50 font-medium text-amber-800 ${
-            compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'
-          }`}
-        >
-          {label}
-        </span>
+    <>
+      {visibleSources.map((source, sourceIndex) => (
+        <SourceBadge key={`${moment.id}-source-${sourceIndex}`} source={source} compact={compact} />
       ))}
+      {hiddenCount > 0 && (
+        <span className="inline-flex items-center rounded-full border border-border bg-bgAlt px-2 py-1 text-[10px] font-medium leading-none text-textMid">
+          +{hiddenCount}
+        </span>
+      )}
+    </>
+  )
+}
+
+function VerificationBadges({ moment, compact = false }: { moment: PresentationMoment; compact?: boolean }) {
+  const claims = moment._verification?.uncitedClaims ?? []
+
+  if (claims.length === 0) return null
+
+  return (
+    <>
+      {claims.map((claim) => (
+        <VerificationBadge key={`${moment.id}-claim-${claim}`} claim={claim} compact={compact} />
+      ))}
+    </>
+  )
+}
+
+function TrustBadges({ moment }: { moment: PresentationMoment }) {
+  const hasSources = moment.sources.length > 0
+  const hasWarnings = (moment._verification?.uncitedClaims.length ?? 0) > 0
+
+  if (!hasSources && !hasWarnings) return null
+
+  return (
+    <div className="flex flex-wrap gap-1.5 lg:justify-end">
+      <SourceBadges moment={moment} />
+      <VerificationBadges moment={moment} />
     </div>
   )
 }
 
 export default function MomentCard({ moment, index, isActive, isLast, onToggle, style }: MomentCardProps) {
   const [isScriptEditing, setIsScriptEditing] = useState(false)
+  const isUncited = moment._verification?.status === 'uncited'
 
   useEffect(() => {
     if (!isActive) setIsScriptEditing(false)
@@ -125,7 +154,7 @@ export default function MomentCard({ moment, index, isActive, isLast, onToggle, 
           isActive
             ? 'border-accent/25 shadow-[0_18px_50px_rgba(28,28,26,0.08)]'
             : 'border-border hover:border-accent/25 hover:shadow-[0_14px_35px_rgba(28,28,26,0.06)]'
-        } ${isActive ? '' : 'cursor-pointer'}`}
+        } ${isUncited ? 'border-l-[3px] border-l-red-300' : ''} ${isActive ? '' : 'cursor-pointer'}`}
       >
         <button
           type="button"
@@ -145,9 +174,16 @@ export default function MomentCard({ moment, index, isActive, isLast, onToggle, 
             <h2 className="font-serif text-[18px] leading-6 text-text">{moment.title}</h2>
           </div>
 
-          <span className="shrink-0 rounded-full bg-bgAlt px-2.5 py-1 text-xs font-semibold text-textMid">
-            {formatDuration(moment.duration_seconds)}
-          </span>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <span className="rounded-full bg-bgAlt px-2.5 py-1 text-xs font-semibold text-textMid">
+              {formatDuration(moment.duration_seconds)}
+            </span>
+            {!isActive && (
+              <div className="flex max-w-[280px] flex-wrap justify-end gap-1.5">
+                <SourceBadges moment={moment} compact maxVisible={2} />
+              </div>
+            )}
+          </div>
         </button>
 
         {moment._warning && (
@@ -180,7 +216,7 @@ export default function MomentCard({ moment, index, isActive, isLast, onToggle, 
                   Revise with agent
                 </button>
               </div>
-              <SourcePills sources={moment.sources} />
+              <TrustBadges moment={moment} />
             </div>
           </>
         ) : (
@@ -188,9 +224,6 @@ export default function MomentCard({ moment, index, isActive, isLast, onToggle, 
             <MiniSlide moment={moment} />
             <div className="min-w-0 self-center">
               <p className="line-clamp-2 text-[13px] leading-5 text-textMid">{moment.script}</p>
-              <div className="mt-3">
-                <SourcePills sources={moment.sources} compact />
-              </div>
             </div>
           </div>
         )}

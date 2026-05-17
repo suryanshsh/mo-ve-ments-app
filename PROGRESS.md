@@ -222,7 +222,7 @@
 
 ---
 
-## Phase 13: AI Agent Chat Sidebar *(In Progress — uncommitted)*
+## Phase 13: AI Agent Chat Sidebar
 
 - **`src/modules/agent/router.ts`** — Agent tRPC router
   - `chat`: Fetches presentation context, loads/creates conversation history, builds the Haiku system prompt, collects the streamed agent response, parses edit tags, applies script/slide updates, persists conversation messages, and returns clean text plus updated moments
@@ -258,10 +258,63 @@
 
 ---
 
+## Phase 14: Source Citation Verification
+
+- **`src/modules/generation/source-verifier.ts`** — Moment source verification
+  - Adds `verifyMomentSources(moments, documents)` with `verified`, `partial`, `uncited`, and `clean` statuses
+  - Extracts numeric claims, percentages, currencies, and proper nouns from scripts
+  - Checks cited filenames against uploaded `source_documents` and verifies claims against extracted source text
+  - Persists per-source `verified` flags plus hidden moment-level verification metadata in the `sources` JSON field
+- **`src/modules/generation/router.ts`** — Generation pipeline wiring
+  - Runs source verification after full generation and single-moment regeneration
+  - Stores verification metadata before inserting/updating moments
+  - Returns `_verification` to the workspace immediately after generation mutations
+- **Workspace UI**
+  - `SourceBadge`: Amber citation pill, green checked pill for verified sources
+  - `VerificationBadge`: Red uncited-claim pill with hover/focus tooltip
+  - `MomentCard`: Shows source badges beside collapsed timing, source + warning badges in the expanded action bar, and a subtle red left border for uncited moments
+  - `WorkspaceClient`: Hydrates persisted verification metadata from `sources`
+- **Validation:**
+  - Verifier smoke test confirmed verified and uncited currency-claim paths
+  - `npx tsc --noEmit --pretty false` passed
+  - `git diff --check` passed
+  - `npm run build` passed
+  - Browser sanity check loaded the workspace with new source badges visible
+
+---
+
+## Phase 15: PPTX Export Service *(In Progress — uncommitted)*
+
+- **Package added:** `pptxgenjs`
+- **`src/modules/export/pptx-generator.ts`** — PPTX generation
+  - Generates simple 16:9 widescreen PowerPoint decks with dark blue-gray backgrounds
+  - Adds a title slide with Arial title/subtitle text
+  - Maps each moment to one slide with heading, up to six bullet rows, emotion label, slide number, and speaker notes from `script`
+  - Keeps the template compatibility-first: Arial only, no animations, no transitions, no images, no gradients
+- **`src/modules/export/router.ts`** — Export tRPC router
+  - Adds `createPptx({ presentationId })`
+  - Fetches owned presentation moments ordered by position
+  - Blocks free-plan users with an upgrade message
+  - Uploads generated PPTX files to Supabase Storage and stores export records with 1-hour signed URLs
+- **`src/app/api/export/download/[id]/route.ts`** — Download redirect
+  - Validates the authenticated user owns the export through its presentation
+  - Redirects to the stored signed URL or refreshes it when expired
+- **`src/components/workspace/ExportButton.tsx`** — Workspace export UI
+  - Top-bar Export dropdown with **Download as PowerPoint (.pptx)**
+  - Shows spinner while generating, triggers browser download on success, and shows upgrade/export error states
+- **`supabase/migrations/003_exports_storage_bucket.sql`** — Storage setup
+  - Creates the private `exports` bucket and per-user authenticated Storage policies
+- **Validation:**
+  - PPTX smoke test generated a valid zip-format buffer for 3-bullet and 6-bullet slides
+  - `npx tsc --noEmit --pretty false` passed
+  - `git diff --check` passed
+  - `npm run build` passed
+
+---
+
 ## Known Issues
 - `/prototype` page has broken import (`@/../../deckbuddy-reimagined`)
 - Rehearse is intentionally disabled/coming soon
-- Export button is present in the workspace top bar but PPTX export UI is not wired yet
 - Turbopack persistent cache can serve stale server code on file edits (workaround: restart dev server)
 - Anthropic warned `claude-sonnet-4-20250514` is deprecated and reaches end-of-life on June 15, 2026
 - Next.js warns the `middleware` file convention is deprecated and should eventually migrate to `proxy`

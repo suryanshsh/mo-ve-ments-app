@@ -3,6 +3,13 @@ import type { MomentEmotion, PresentationStatus } from '@/lib/supabase/types'
 
 export type SourceCitation = string | Record<string, unknown>
 
+export type SourceVerificationStatus = 'verified' | 'partial' | 'uncited' | 'clean'
+
+export type SourceVerification = {
+  status: SourceVerificationStatus
+  uncitedClaims: string[]
+}
+
 export type PresentationSummary = {
   id: string
   title: string
@@ -29,10 +36,7 @@ export type PresentationMoment = {
   created_at?: string
   updated_at?: string
   _warning?: string
-  _sourceVerification?: {
-    verified: boolean
-    verifiedSources: string[]
-  }
+  _verification?: SourceVerification
 }
 
 type MomentUpdate = Partial<Omit<PresentationMoment, 'id'>>

@@ -11,6 +11,7 @@ import {
   type PresentationMoment,
   type PresentationSummary,
   type SourceCitation,
+  type SourceVerificationStatus,
 } from '@/stores/presentation'
 import AgentSidebar from './AgentSidebar'
 import ArcBar from './ArcBar'
@@ -25,6 +26,7 @@ const PROGRESS_MESSAGES = [
 ]
 
 const VALID_EMOTIONS: MomentEmotion[] = ['hook', 'empathy', 'build', 'reveal', 'proof', 'close']
+const VALID_VERIFICATION_STATUSES: SourceVerificationStatus[] = ['verified', 'partial', 'uncited', 'clean']
 
 type WorkspaceMomentRecord = {
   id: string
@@ -40,6 +42,7 @@ type WorkspaceMomentRecord = {
   created_at?: string
   updated_at?: string
   _warning?: unknown
+  _verification?: unknown
   _sourceVerification?: unknown
 }
 
@@ -69,6 +72,18 @@ const normalizeStringArray = (value: unknown) => {
   return value.filter((item): item is string => typeof item === 'string')
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const isVerificationMetadataSource = (source: unknown) =>
+  isRecord(source) && source.type === 'verification'
+
+const getVerificationMetadataSource = (value: unknown) => {
+  if (!Array.isArray(value)) return undefined
+
+  return value.find(isVerificationMetadataSource)
+}
+
 const normalizeSources = (value: unknown): SourceCitation[] => {
   if (!Array.isArray(value)) return []
 
@@ -77,22 +92,34 @@ const normalizeSources = (value: unknown): SourceCitation[] => {
   for (const item of value) {
     if (typeof item === 'string' && item.trim()) {
       sources.push(item.trim())
-    } else if (typeof item === 'object' && item !== null) {
-      sources.push(item as Record<string, unknown>)
+    } else if (isRecord(item) && !isVerificationMetadataSource(item)) {
+      sources.push(item)
     }
   }
 
   return sources
 }
 
-const normalizeVerification = (value: unknown): PresentationMoment['_sourceVerification'] => {
-  if (typeof value !== 'object' || value === null) return undefined
+const normalizeVerification = (value: unknown): PresentationMoment['_verification'] => {
+  if (!isRecord(value)) return undefined
 
-  const record = value as Record<string, unknown>
-  const verified = typeof record.verified === 'boolean' ? record.verified : false
-  const verifiedSources = normalizeStringArray(record.verifiedSources)
+  if (typeof value.verified === 'boolean') {
+    return {
+      status: value.verified ? 'verified' : 'partial',
+      uncitedClaims: [],
+    }
+  }
 
-  return { verified, verifiedSources }
+  const status = typeof value.status === 'string' ? value.status : ''
+
+  if (!VALID_VERIFICATION_STATUSES.includes(status as SourceVerificationStatus)) {
+    return undefined
+  }
+
+  return {
+    status: status as SourceVerificationStatus,
+    uncitedClaims: normalizeStringArray(value.uncitedClaims),
+  }
 }
 
 const normalizeMoment = (
@@ -117,7 +144,10 @@ const normalizeMoment = (
     created_at: moment.created_at,
     updated_at: moment.updated_at,
     _warning: typeof moment._warning === 'string' ? moment._warning : undefined,
-    _sourceVerification: normalizeVerification(moment._sourceVerification),
+    _verification:
+      normalizeVerification(moment._verification) ??
+      normalizeVerification(getVerificationMetadataSource(moment.sources)) ??
+      normalizeVerification(moment._sourceVerification),
   }
 }
 

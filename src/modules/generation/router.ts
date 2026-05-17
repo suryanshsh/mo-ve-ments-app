@@ -4,7 +4,7 @@ import type { createServerSupabaseClient } from '@/lib/supabase/server'
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 import {
-  verifySourceCitations,
+  verifyMomentSources,
   type Moment,
   type SourceCitation,
   type SourceDocument,
@@ -377,10 +377,21 @@ const toMomentForVerification = (moment: GeneratedMoment): Moment => ({
   sources: moment.sources as SourceCitation[],
 })
 
+const isVerificationMetadataSource = (source: unknown) =>
+  typeof source === 'object' &&
+  source !== null &&
+  !Array.isArray(source) &&
+  (source as Record<string, unknown>).type === 'verification'
+
+const stripVerificationMetadataSources = (sources: unknown) =>
+  Array.isArray(sources)
+    ? sources.filter((source) => !isVerificationMetadataSource(source))
+    : []
+
 const toExistingMomentForPrompt = (moment: ExistingMomentRecord) => ({
   ...moment,
   slide_bullets: toStringArray(moment.slide_bullets),
-  sources: Array.isArray(moment.sources) ? moment.sources : [],
+  sources: stripVerificationMetadataSources(moment.sources),
 })
 
 const getNextUtcMidnight = () => {
@@ -527,7 +538,7 @@ export const generationRouter = router({
         const prompt = buildGenerationPrompt(presentation, sourceDocuments)
         const response = await collectStreamedText(prompt)
         const { moments, totalDuration, tips } = parseGeneratedMoments(response)
-        const verifiedMoments = verifySourceCitations(
+        const verifiedMoments = verifyMomentSources(
           moments.map(toMomentForVerification),
           sourceDocuments
         )
@@ -582,8 +593,7 @@ export const generationRouter = router({
 
         return sortedCreatedMoments.map((moment, index) => ({
           ...moment,
-          _warning: verifiedMoments[index]?._warning,
-          _sourceVerification: verifiedMoments[index]?._sourceVerification,
+          _verification: verifiedMoments[index]?._verification,
         }))
       } catch (error) {
         throwFriendlyGenerationError(error)
@@ -622,7 +632,7 @@ export const generationRouter = router({
         )
         const response = await collectStreamedText(prompt)
         const { moments } = parseGeneratedMoments(response)
-        const [generatedMoment] = verifySourceCitations(
+        const [generatedMoment] = verifyMomentSources(
           [toMomentForVerification(moments[0])],
           sourceDocuments
         )
@@ -650,8 +660,7 @@ export const generationRouter = router({
 
         return {
           ...updatedMoment,
-          _warning: generatedMoment._warning,
-          _sourceVerification: generatedMoment._sourceVerification,
+          _verification: generatedMoment._verification,
         }
       } catch (error) {
         throwFriendlyGenerationError(error)

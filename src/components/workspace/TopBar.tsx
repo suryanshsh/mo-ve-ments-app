@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import SaveIndicator from '@/components/ui/SaveIndicator'
 import { usePresentationStore } from '@/stores/presentation'
+import ExportButton from './ExportButton'
 
 const formatDuration = (seconds: number) => {
   const minutes = Math.floor(seconds / 60)
@@ -67,12 +68,7 @@ export default function TopBar() {
           >
             Rehearse
           </button>
-          <button
-            type="button"
-            className="rounded-[10px] bg-accent px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-accent/90"
-          >
-            Export
-          </button>
+          <ExportButton />
         </div>
       </div>
     </header>
