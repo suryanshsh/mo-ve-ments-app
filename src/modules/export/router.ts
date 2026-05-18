@@ -126,7 +126,7 @@ export const exportRouter = router({
       if (profile.plan === 'free') {
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message: 'Upgrade to Pro to export PowerPoint files.',
+          message: 'PPTX export is available on the Pro plan.',
         })
       }
 

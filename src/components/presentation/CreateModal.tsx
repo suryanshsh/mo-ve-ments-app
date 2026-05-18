@@ -163,7 +163,7 @@ export default function CreateModal({ onClose }: { onClose: () => void }) {
 
               {createMutation.isError && (
                 <p className="text-sm text-red-600 text-center">
-                  Something went wrong. Please try again.
+                  {(createMutation.error as any)?.message || 'Something went wrong. Please try again.'}
                 </p>
               )}
             </form>

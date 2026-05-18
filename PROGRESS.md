@@ -312,6 +312,35 @@
 
 ---
 
+## Phase 16: Free Tier Limits *(In Progress — uncommitted)*
+
+- **`src/modules/auth/plan-check.ts`** — Plan enforcement utilities
+  - Adds shared helpers for generation and presentation limits
+  - Free generation limit: 3/day, Pro/Team generation limit: 50/day
+  - Free presentation limit: 2, Pro/Team presentation limit: 999
+  - Resets `generation_count_today` at UTC day boundaries and increments generation usage after successful runs
+- **`src/modules/generation/router.ts`** — Generation enforcement
+  - Uses shared `checkGenerationLimit` before both full generation and regenerate-one
+  - Throws `TOO_MANY_REQUESTS` with a clear free-plan upgrade message when limit is exhausted
+  - Uses shared `incrementGenerationCount` after successful generation calls
+- **`src/modules/presentation/router.ts`** — Presentation creation enforcement
+  - Uses shared `checkPresentationLimit` before creating presentations
+  - Blocks creation with: "Free plan allows 2 presentations. Delete one or upgrade to Pro."
+- **`src/modules/export/router.ts`** — Export plan message
+  - Free-plan export block message updated to: "PPTX export is available on the Pro plan."
+- **UI limit surfaces**
+  - `src/components/ui/LimitIndicator.tsx`: Top-bar limit pill showing `remaining/limit generations remaining`
+  - Color states: green (2+ remaining), amber (1 remaining), red (0 remaining)
+  - Clicking at 0 opens upgrade guidance
+  - `src/components/ui/UpgradePrompt.tsx`: reusable upgrade card with Pro value summary and a "coming soon" checkout toast
+  - `src/components/workspace/TopBar.tsx`: renders `LimitIndicator` beside save state
+- **Validation:**
+  - `npx tsc --noEmit --pretty false` passed
+  - `git diff --check` passed
+  - `npm run build` passed
+
+---
+
 ## Known Issues
 - `/prototype` page has broken import (`@/../../deckbuddy-reimagined`)
 - Rehearse is intentionally disabled/coming soon

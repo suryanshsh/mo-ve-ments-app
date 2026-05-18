@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import LimitIndicator from '@/components/ui/LimitIndicator'
 import SaveIndicator from '@/components/ui/SaveIndicator'
 import { usePresentationStore } from '@/stores/presentation'
 import ExportButton from './ExportButton'
@@ -37,6 +38,7 @@ export default function TopBar() {
             <div className="flex min-w-0 items-center gap-3">
               <h1 className="truncate font-serif text-[18px] leading-6 text-text">{title}</h1>
               <SaveIndicator />
+              <LimitIndicator />
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-2">

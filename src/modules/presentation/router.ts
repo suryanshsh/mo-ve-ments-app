@@ -1,6 +1,7 @@
 import { publicProcedure, router } from '@/lib/trpc/server'
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
+import { checkPresentationLimit } from '@/modules/auth/plan-check'
 
 export const presentationRouter = router({
   list: publicProcedure.query(async ({ ctx }) => {
@@ -56,6 +57,19 @@ export const presentationRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { data: { user } } = await ctx.supabase.auth.getUser()
       if (!user) throw new TRPCError({ code: 'UNAUTHORIZED' })
+
+      try {
+        const limit = await checkPresentationLimit(user.id, ctx.supabase)
+        if (!limit.allowed) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Free plan allows 2 presentations. Delete one or upgrade to Pro.',
+          })
+        }
+      } catch (err) {
+        if (err instanceof TRPCError) throw err
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Could not check presentation limits' })
+      }
 
       const { data: presentation, error } = await ctx.supabase
         .from('presentations')

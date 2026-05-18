@@ -3,18 +3,13 @@ import { publicProcedure, router } from '@/lib/trpc/server'
 import type { createServerSupabaseClient } from '@/lib/supabase/server'
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
+import { checkGenerationLimit, incrementGenerationCount } from '@/modules/auth/plan-check'
 import {
   verifyMomentSources,
   type Moment,
   type SourceCitation,
   type SourceDocument,
 } from './source-verifier'
-
-const PLAN_LIMITS = {
-  free: 3,
-  pro: 50,
-  team: 50,
-} as const
 
 const VALID_EMOTIONS = ['hook', 'empathy', 'build', 'reveal', 'proof', 'close'] as const
 
@@ -39,12 +34,6 @@ type PresentationRecord = {
   title: string
   audience: string | null
   target_duration: string | null
-}
-
-type ProfileRecord = {
-  plan: keyof typeof PLAN_LIMITS
-  generation_count_today: number
-  generation_count_reset_at: string | null
 }
 
 type SourceDocumentRecord = SourceDocument & {
@@ -394,72 +383,6 @@ const toExistingMomentForPrompt = (moment: ExistingMomentRecord) => ({
   sources: stripVerificationMetadataSources(moment.sources),
 })
 
-const getNextUtcMidnight = () => {
-  const now = new Date()
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString()
-}
-
-const getCurrentGenerationCount = (profile: ProfileRecord) => {
-  if (!profile.generation_count_reset_at) {
-    return profile.generation_count_today
-  }
-
-  return new Date(profile.generation_count_reset_at).getTime() <= Date.now()
-    ? 0
-    : profile.generation_count_today
-}
-
-const getProfile = async (supabase: SupabaseClient, userId: string) => {
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .select('plan, generation_count_today, generation_count_reset_at')
-    .eq('id', userId)
-    .single()
-
-  if (error || !profile) {
-    throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Could not load generation limits' })
-  }
-
-  return profile as ProfileRecord
-}
-
-const assertWithinDailyLimit = (profile: ProfileRecord) => {
-  const limit = PLAN_LIMITS[profile.plan] ?? PLAN_LIMITS.free
-  const currentCount = getCurrentGenerationCount(profile)
-
-  if (currentCount >= limit) {
-    throw new TRPCError({
-      code: 'TOO_MANY_REQUESTS',
-      message: 'Daily generation limit reached',
-    })
-  }
-
-  return currentCount
-}
-
-const incrementGenerationCount = async (
-  supabase: SupabaseClient,
-  userId: string,
-  currentCount: number,
-  profile: ProfileRecord
-) => {
-  const resetAt = profile.generation_count_reset_at && new Date(profile.generation_count_reset_at).getTime() > Date.now()
-    ? profile.generation_count_reset_at
-    : getNextUtcMidnight()
-
-  const { error } = await supabase
-    .from('profiles')
-    .update({
-      generation_count_today: currentCount + 1,
-      generation_count_reset_at: resetAt,
-    })
-    .eq('id', userId)
-
-  if (error) {
-    throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Could not update generation limits' })
-  }
-}
-
 const requireUser = async (supabase: SupabaseClient) => {
   const { data: { user }, error } = await supabase.auth.getUser()
 
@@ -529,12 +452,19 @@ export const generationRouter = router({
     .mutation(async ({ ctx, input }) => {
       try {
         const user = await requireUser(ctx.supabase)
-        const [presentation, profile, sourceDocuments] = await Promise.all([
+        const [presentation, sourceDocuments, generationLimit] = await Promise.all([
           getOwnedPresentation(ctx.supabase, input.presentationId, user.id),
-          getProfile(ctx.supabase, user.id),
           getSourceDocuments(ctx.supabase, input.presentationId),
+          checkGenerationLimit(user.id, ctx.supabase),
         ])
-        const currentCount = assertWithinDailyLimit(profile)
+
+        if (!generationLimit.allowed) {
+          throw new TRPCError({
+            code: 'TOO_MANY_REQUESTS',
+            message: `You've used all ${generationLimit.limit} of your free daily generations. Upgrade to Pro for unlimited generations.`,
+          })
+        }
+
         const prompt = buildGenerationPrompt(presentation, sourceDocuments)
         const response = await collectStreamedText(prompt)
         const { moments, totalDuration, tips } = parseGeneratedMoments(response)
@@ -589,7 +519,7 @@ export const generationRouter = router({
           throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Could not update presentation' })
         }
 
-        await incrementGenerationCount(ctx.supabase, user.id, currentCount, profile)
+        await incrementGenerationCount(user.id, ctx.supabase)
 
         return sortedCreatedMoments.map((moment, index) => ({
           ...moment,
@@ -608,8 +538,14 @@ export const generationRouter = router({
     .mutation(async ({ ctx, input }) => {
       try {
         const user = await requireUser(ctx.supabase)
-        const profile = await getProfile(ctx.supabase, user.id)
-        const currentCount = assertWithinDailyLimit(profile)
+        const generationLimit = await checkGenerationLimit(user.id, ctx.supabase)
+
+        if (!generationLimit.allowed) {
+          throw new TRPCError({
+            code: 'TOO_MANY_REQUESTS',
+            message: `You've used all ${generationLimit.limit} of your free daily generations. Upgrade to Pro for unlimited generations.`,
+          })
+        }
 
         const { data: existingMoment, error: momentError } = await ctx.supabase
           .from('moments')
@@ -656,7 +592,7 @@ export const generationRouter = router({
           throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Could not update moment' })
         }
 
-        await incrementGenerationCount(ctx.supabase, user.id, currentCount, profile)
+        await incrementGenerationCount(user.id, ctx.supabase)
 
         return {
           ...updatedMoment,
