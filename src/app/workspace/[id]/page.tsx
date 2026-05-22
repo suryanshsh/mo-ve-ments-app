@@ -1,14 +1,16 @@
-export default function WorkspacePage({
+import ErrorBoundary from '@/components/ui/ErrorBoundary'
+import WorkspaceClient from '@/components/workspace/WorkspaceClient'
+
+export default async function WorkspacePage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
+  const { id } = await params
+
   return (
-    <main className="flex items-center justify-center min-h-screen">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Workspace</h1>
-        <p className="text-textMid">Workspace ID: {params.id}</p>
-      </div>
-    </main>
+    <ErrorBoundary>
+      <WorkspaceClient presentationId={id} />
+    </ErrorBoundary>
   )
 }
