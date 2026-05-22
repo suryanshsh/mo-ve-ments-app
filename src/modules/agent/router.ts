@@ -4,6 +4,7 @@ import {
   parseAgentEdits,
   type AgentChatMessage,
 } from '@/lib/ai'
+import { collectTextStream } from '@/lib/ai/stream'
 import { publicProcedure, router } from '@/lib/trpc/server'
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
@@ -98,13 +99,7 @@ const toActiveMomentPrompt = (moment: MomentRecord | null) => {
 }
 
 const collectAgentText = async (systemPrompt: string, messages: AgentChatMessage[]) => {
-  const chunks: string[] = []
-
-  for await (const chunk of agentChat(systemPrompt, messages)) {
-    chunks.push(chunk)
-  }
-
-  return chunks.join('')
+  return collectTextStream(agentChat(systemPrompt, messages))
 }
 
 const requireUser = async (supabase: unknown) => {

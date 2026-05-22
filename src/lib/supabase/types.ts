@@ -11,6 +11,10 @@ export type ProfilesRow = {
   plan: ProfilePlan
   stripe_customer_id: string | null
   stripe_subscription_id: string | null
+  ls_customer_id: string | null
+  ls_subscription_id: string | null
+  ls_subscription_status: string | null
+  ls_subscription_updated_at: string | null
   generation_count_today: number
   generation_count_reset_at: string | null
   created_at: string
@@ -23,6 +27,10 @@ export type ProfilesInsert = {
   plan?: ProfilePlan
   stripe_customer_id?: string | null
   stripe_subscription_id?: string | null
+  ls_customer_id?: string | null
+  ls_subscription_id?: string | null
+  ls_subscription_status?: string | null
+  ls_subscription_updated_at?: string | null
   generation_count_today?: number
   generation_count_reset_at?: string | null
   created_at?: string
@@ -35,6 +43,10 @@ export type ProfilesUpdate = {
   plan?: ProfilePlan
   stripe_customer_id?: string | null
   stripe_subscription_id?: string | null
+  ls_customer_id?: string | null
+  ls_subscription_id?: string | null
+  ls_subscription_status?: string | null
+  ls_subscription_updated_at?: string | null
   generation_count_today?: number
   generation_count_reset_at?: string | null
   created_at?: string
@@ -214,6 +226,30 @@ export type ExportsUpdate = {
   created_at?: string
 }
 
+export type LemonSqueezyWebhookEventsRow = {
+  event_id: string
+  event_name: string | null
+  subscription_id: string | null
+  payload_created_at: string | null
+  processed_at: string
+}
+
+export type LemonSqueezyWebhookEventsInsert = {
+  event_id: string
+  event_name?: string | null
+  subscription_id?: string | null
+  payload_created_at?: string | null
+  processed_at?: string
+}
+
+export type LemonSqueezyWebhookEventsUpdate = {
+  event_id?: string
+  event_name?: string | null
+  subscription_id?: string | null
+  payload_created_at?: string | null
+  processed_at?: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -221,32 +257,53 @@ export type Database = {
         Row: ProfilesRow
         Insert: ProfilesInsert
         Update: ProfilesUpdate
+        Relationships: []
       }
       presentations: {
         Row: PresentationsRow
         Insert: PresentationsInsert
         Update: PresentationsUpdate
+        Relationships: []
       }
       moments: {
         Row: MomentsRow
         Insert: MomentsInsert
         Update: MomentsUpdate
+        Relationships: []
       }
       source_documents: {
         Row: SourceDocumentsRow
         Insert: SourceDocumentsInsert
         Update: SourceDocumentsUpdate
+        Relationships: []
       }
       agent_conversations: {
         Row: AgentConversationsRow
         Insert: AgentConversationsInsert
         Update: AgentConversationsUpdate
+        Relationships: []
       }
       exports: {
         Row: ExportsRow
         Insert: ExportsInsert
         Update: ExportsUpdate
+        Relationships: []
+      }
+      lemon_squeezy_webhook_events: {
+        Row: LemonSqueezyWebhookEventsRow
+        Insert: LemonSqueezyWebhookEventsInsert
+        Update: LemonSqueezyWebhookEventsUpdate
+        Relationships: []
       }
     }
+    Views: Record<string, never>
+    Functions: {
+      batch_update_moment_positions: {
+        Args: { p_user_id: string; p_updates: JsonObjectArray }
+        Returns: MomentsRow[]
+      }
+    }
+    Enums: Record<string, never>
+    CompositeTypes: Record<string, never>
   }
 }

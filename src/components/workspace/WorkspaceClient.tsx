@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { FileUploadZone } from '@/components/document/FileUploadZone'
 import Toast from '@/components/ui/Toast'
 import { useAutosave } from '@/hooks/useAutosave'
@@ -15,6 +15,7 @@ import {
 } from '@/stores/presentation'
 import AgentSidebar from './AgentSidebar'
 import ArcBar from './ArcBar'
+import GenerationError, { type GenerationPartialResult } from './GenerationError'
 import MomentList from './MomentList'
 import TopBar from './TopBar'
 
@@ -57,6 +58,11 @@ type WorkspacePresentationRecord = {
   created_at?: string
   updated_at?: string
   moments?: WorkspaceMomentRecord[]
+}
+
+type GenerationErrorState = {
+  message: string
+  partialResult?: GenerationPartialResult | null
 }
 
 const normalizeEmotion = (emotion: string): MomentEmotion => {
@@ -163,6 +169,27 @@ const toPresentationSummary = (presentation: WorkspacePresentationRecord): Prese
   updated_at: presentation.updated_at,
 })
 
+const isGenerationPartialResult = (value: unknown): value is GenerationPartialResult => {
+  if (!isRecord(value)) return false
+
+  return typeof value.createdCount === 'number'
+}
+
+const getGenerationPartialResult = (error: unknown) => {
+  if (!isRecord(error) || !isRecord(error.data)) return null
+
+  const partialResult = error.data.partialResult
+  return isGenerationPartialResult(partialResult) ? partialResult : null
+}
+
+const getGenerationErrorMessage = (error: unknown) => {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  return 'Something went wrong with generation. Please try again.'
+}
+
 function useProgressMessage(active: boolean) {
   const [index, setIndex] = useState(0)
 
@@ -182,10 +209,99 @@ function useProgressMessage(active: boolean) {
   return PROGRESS_MESSAGES[index]
 }
 
+function SkeletonBlock({ className }: { className: string }) {
+  return <div className={`skeleton-shimmer rounded-md ${className}`} />
+}
+
+function MomentCardSkeleton({ index }: { index: number }) {
+  return (
+    <div
+      className="rounded-xl border border-border bg-surface p-5 shadow-sm"
+      style={{ animationDelay: `${index * 60}ms` }}
+    >
+      <div className="flex gap-4">
+        <div className="flex flex-col items-center">
+          <SkeletonBlock className="h-9 w-9 rounded-full" />
+          <div className="mt-3 h-28 w-px bg-border" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <SkeletonBlock className="mb-3 h-4 w-24 rounded-full" />
+              <SkeletonBlock className="h-7 w-3/5" />
+              <SkeletonBlock className="mt-3 h-4 w-4/5" />
+            </div>
+            <SkeletonBlock className="h-8 w-28 rounded-full" />
+          </div>
+          <div className="mt-6 grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
+            <SkeletonBlock className="aspect-video rounded-xl" />
+            <div className="space-y-3">
+              <SkeletonBlock className="h-3 w-full" />
+              <SkeletonBlock className="h-3 w-11/12" />
+              <SkeletonBlock className="h-3 w-4/5" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AgentSidebarLoadingSkeleton() {
+  return (
+    <aside className="hidden border-l border-border bg-surface px-4 py-5 lg:fixed lg:right-0 lg:top-[109px] lg:block lg:h-[calc(100vh-109px)] lg:w-[260px]">
+      <SkeletonBlock className="mb-2 h-4 w-28" />
+      <SkeletonBlock className="mb-6 h-3 w-44" />
+      <div className="space-y-3">
+        <SkeletonBlock className="h-14 w-4/5 rounded-2xl" />
+        <SkeletonBlock className="ml-auto h-12 w-3/4 rounded-2xl" />
+        <SkeletonBlock className="h-16 w-5/6 rounded-2xl" />
+      </div>
+      <div className="absolute bottom-5 left-4 right-4">
+        <SkeletonBlock className="h-10 rounded-full" />
+      </div>
+    </aside>
+  )
+}
+
 function LoadingState() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-bg">
-      <div className="h-8 w-8 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+    <main className="min-h-screen bg-bg">
+      <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
+        <div className="mx-auto flex min-h-[72px] max-w-[1440px] items-center justify-between gap-5 px-5 py-3 lg:px-8">
+          <div className="flex min-w-0 items-center gap-4">
+            <SkeletonBlock className="h-9 w-9 rounded-[10px]" />
+            <div>
+              <SkeletonBlock className="mb-3 h-5 w-56" />
+              <div className="flex gap-2">
+                <SkeletonBlock className="h-6 w-20 rounded-full" />
+                <SkeletonBlock className="h-6 w-16 rounded-full" />
+                <SkeletonBlock className="hidden h-6 w-28 rounded-full sm:block" />
+              </div>
+            </div>
+          </div>
+          <div className="hidden shrink-0 gap-2 sm:flex">
+            <SkeletonBlock className="h-10 w-20 rounded-[10px]" />
+            <SkeletonBlock className="h-10 w-24 rounded-[10px]" />
+          </div>
+        </div>
+      </header>
+      <div className="border-b border-border bg-surface">
+        <div className="mx-auto flex h-9 max-w-[1440px] gap-1 px-5 lg:px-8">
+          <SkeletonBlock className="h-9 w-2/12 rounded-none" />
+          <SkeletonBlock className="h-9 w-3/12 rounded-none" />
+          <SkeletonBlock className="h-9 w-2/12 rounded-none" />
+          <SkeletonBlock className="h-9 w-5/12 rounded-none" />
+        </div>
+      </div>
+      <section className="mx-auto max-w-[1440px] px-5 py-8 lg:pl-8 lg:pr-[284px]">
+        <div className="grid gap-6">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <MomentCardSkeleton key={`moment-skeleton-${index}`} index={index} />
+          ))}
+        </div>
+      </section>
+      <AgentSidebarLoadingSkeleton />
     </main>
   )
 }
@@ -239,43 +355,57 @@ function DraftWorkspace({
       <TopBar />
       <ArcBar />
       <section className="mx-auto max-w-5xl px-5 py-10 lg:px-8">
-        <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-            <h2 className="font-serif text-2xl text-text">Source documents</h2>
-            <p className="mt-2 mb-5 text-sm leading-6 text-textMid">
-              Add PDFs, docs, notes, or research files before generating the first storyboard.
-            </p>
-            <FileUploadZone presentationId={presentationId} />
+        <div className="mx-auto flex max-w-xl flex-col items-center text-center">
+          <div className="mb-6 grid h-24 w-24 place-items-center rounded-2xl border border-border bg-surface shadow-sm">
+            <div className="h-14 w-16 rounded-lg bg-[#1E293B] p-2 shadow-sm">
+              <div className="mb-2 h-2 w-10 rounded-full bg-[#F59E0B]/70" />
+              <div className="space-y-1.5">
+                <div className="h-1.5 rounded-full bg-white/40" />
+                <div className="h-1.5 w-4/5 rounded-full bg-white/30" />
+                <div className="h-1.5 w-2/3 rounded-full bg-white/25" />
+              </div>
+            </div>
           </div>
+          <h2 className="font-serif text-4xl leading-tight text-text">Ready to generate</h2>
+          <p className="mt-3 text-sm leading-6 text-textMid">
+            Add any source documents you want the AI to cite, then create the first pass of moments.
+          </p>
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={isGenerating}
+            className="mt-6 rounded-[10px] bg-accent px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isGenerating ? 'Generating…' : 'Generate my moments'}
+          </button>
+        </div>
 
-          <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-textLight">Draft</span>
-            <h2 className="mt-4 font-serif text-3xl leading-tight text-text">Ready to shape the narrative</h2>
-            <p className="mt-3 text-sm leading-6 text-textMid">
-              Generate the first set of moments when your brief and source files are ready.
-            </p>
-            <button
-              type="button"
-              onClick={onGenerate}
-              disabled={isGenerating}
-              className="mt-6 w-full rounded-[10px] bg-accent px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isGenerating ? 'Generating…' : 'Generate moments'}
-            </button>
-          </div>
+        <div className="mx-auto mt-10 max-w-3xl rounded-xl border border-border bg-surface p-6 shadow-sm">
+          <h3 className="font-serif text-2xl text-text">Source documents</h3>
+          <p className="mt-2 mb-5 text-sm leading-6 text-textMid">
+            Upload PDFs, docs, notes, or research files before generating if you want citations in the draft.
+          </p>
+          <FileUploadZone presentationId={presentationId} />
         </div>
       </section>
     </main>
   )
 }
 
-function WorkspaceShell({ presentationId }: { presentationId: string }) {
+function WorkspaceShell({
+  presentationId,
+  generationError,
+}: {
+  presentationId: string
+  generationError?: ReactNode
+}) {
   return (
     <main className="min-h-screen bg-bg">
       <TopBar />
       <ArcBar />
       <section className="mx-auto max-w-[1440px] px-5 py-8 lg:pl-8 lg:pr-[284px]">
         <div className="grid gap-6">
+          {generationError}
           <MomentList />
         </div>
       </section>
@@ -288,7 +418,7 @@ function WorkspaceShell({ presentationId }: { presentationId: string }) {
 export default function WorkspaceClient({ presentationId }: { presentationId: string }) {
   useAutosave()
 
-  const [generationFailed, setGenerationFailed] = useState(false)
+  const [generationError, setGenerationError] = useState<GenerationErrorState | null>(null)
   const [hydratedPresentationId, setHydratedPresentationId] = useState<string | null>(null)
   const setPresentation = usePresentationStore((state) => state.setPresentation)
   const setMoments = usePresentationStore((state) => state.setMoments)
@@ -299,10 +429,16 @@ export default function WorkspaceClient({ presentationId }: { presentationId: st
   const presentationQuery = trpc.presentation.getById.useQuery({ id: presentationId })
   const generationMutation = trpc.generation.create.useMutation({
     onSuccess: async () => {
-      setGenerationFailed(false)
+      setGenerationError(null)
       await presentationQuery.refetch()
     },
-    onError: () => setGenerationFailed(true),
+    onError: async (error) => {
+      setGenerationError({
+        message: getGenerationErrorMessage(error),
+        partialResult: getGenerationPartialResult(error),
+      })
+      await presentationQuery.refetch()
+    },
   })
   const progressMessage = useProgressMessage(generationMutation.isPending)
 
@@ -344,7 +480,7 @@ export default function WorkspaceClient({ presentationId }: { presentationId: st
   ])
 
   const handleGenerate = () => {
-    setGenerationFailed(false)
+    setGenerationError(null)
     generationMutation.mutate({ presentationId })
   }
 
@@ -360,15 +496,32 @@ export default function WorkspaceClient({ presentationId }: { presentationId: st
     return <GenerationProgress message={progressMessage} />
   }
 
-  if (generationFailed) {
-    return <ErrorState onRetry={handleGenerate} isRetrying={generationMutation.isPending} />
-  }
-
   if (hydratedPresentationId !== normalizedWorkspace.presentation.id) {
     return <LoadingState />
   }
 
-  const shouldShowGenerate = normalizedWorkspace.presentation.status === 'draft' || normalizedWorkspace.moments.length === 0
+  if (generationError) {
+    const hasPartialMoments = Boolean(
+      generationError.partialResult?.createdCount && normalizedWorkspace.moments.length > 0
+    )
+    const errorContent = (
+      <GenerationError
+        message={generationError.message}
+        onRetry={handleGenerate}
+        isRetrying={generationMutation.isPending}
+        partialResult={generationError.partialResult}
+        mode={hasPartialMoments ? 'banner' : 'page'}
+      />
+    )
+
+    if (hasPartialMoments) {
+      return <WorkspaceShell presentationId={presentationId} generationError={errorContent} />
+    }
+
+    return errorContent
+  }
+
+  const shouldShowGenerate = normalizedWorkspace.moments.length === 0
 
   if (shouldShowGenerate) {
     return (

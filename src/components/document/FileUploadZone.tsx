@@ -140,10 +140,18 @@ export function FileUploadZone({ presentationId, onUploadComplete }: FileUploadZ
     <div className="space-y-4">
       {/* Drop zone */}
       <div
+        role="button"
+        tabIndex={0}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onClick={handleClick}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            handleClick()
+          }
+        }}
         className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
           isDragOver
             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950'

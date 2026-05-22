@@ -8,7 +8,9 @@ import { usePresentationStore } from '@/stores/presentation'
 const triggerDownload = (downloadUrl: string, fileName: string) => {
   const link = document.createElement('a')
   link.href = downloadUrl
-  link.download = fileName
+  if (!downloadUrl.startsWith('/api/export/download/')) {
+    link.download = fileName
+  }
   link.rel = 'noopener'
   document.body.appendChild(link)
   link.click()

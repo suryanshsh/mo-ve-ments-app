@@ -25,6 +25,10 @@ const getQueryClient = () => {
   return (clientQueryClientSingleton ??= createQueryClient())
 }
 
+const isLocalhost = () =>
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
 export const trpc = createTRPCReact<AppRouter>({
   overrides: {
     useMutation: {
@@ -45,7 +49,7 @@ export function TRPCReactProvider(props: {
     trpc.createClient({
       links: [
         loggerLink({
-          enabled: () => true,
+          enabled: isLocalhost,
         }),
         httpBatchLink({
           url: '/api/trpc',

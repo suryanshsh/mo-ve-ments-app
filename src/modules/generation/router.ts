@@ -1,9 +1,13 @@
 import { generateMoments, GENERATION_SYSTEM_PROMPT } from '@/lib/ai'
+import { isAIServiceError, isGenerationTimeoutError } from '@/lib/ai/errors'
+import { collectTextStream } from '@/lib/ai/stream'
 import { publicProcedure, router } from '@/lib/trpc/server'
 import type { createServerSupabaseClient } from '@/lib/supabase/server'
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 import { checkGenerationLimit, incrementGenerationCount } from '@/modules/auth/plan-check'
+import { sanitizeDocumentContent, sanitizeInput, wrapUserContent } from '@/middleware/security'
+import { createPartialGenerationTRPCError } from '@/middleware/error-handler'
 import {
   verifyMomentSources,
   type Moment,
@@ -100,6 +104,22 @@ const scoreChunk = (chunk: string, searchTerms: string[]) => {
   }, 0)
 }
 
+const escapeXmlAttribute = (value: string) =>
+  sanitizeInput(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+
+const buildUserContext = (presentation: PresentationRecord) =>
+  wrapUserContent(
+    [
+      `Audience: ${sanitizeInput(presentation.audience ?? 'General audience')}`,
+      `Target duration: ${sanitizeInput(presentation.target_duration ?? '10 minutes')}`,
+    ].join('\n'),
+    'user_context'
+  )
+
 const selectRelevantChunks = (
   sourceDocument: SourceDocumentRecord,
   searchText: string,
@@ -136,16 +156,17 @@ const buildSourceContext = (
   return sourceDocuments
     .map((sourceDocument) => {
       const selectedChunks = selectRelevantChunks(sourceDocument, searchText)
+      const tag = `source_document name="${escapeXmlAttribute(sourceDocument.filename)}"`
 
       if (selectedChunks.length === 0) {
-        return `Source: ${sourceDocument.filename}\nNo extractable text was found for this source.`
+        return wrapUserContent('No extractable text was found for this source.', tag)
       }
 
       const chunks = selectedChunks
-        .map(({ text, index }) => `Chunk ${index + 1}:\n"""\n${text.trim()}\n"""`)
+        .map(({ text, index }) => `Chunk ${index + 1}:\n${sanitizeDocumentContent(text)}`)
         .join('\n\n')
 
-      return `Source: ${sourceDocument.filename}\n${chunks}`
+      return wrapUserContent(chunks, tag)
     })
     .join('\n\n---\n\n')
 }
@@ -158,12 +179,16 @@ const buildGenerationPrompt = (
     .filter(Boolean)
     .join(' ')
 
+  const userTopic = wrapUserContent(sanitizeInput(presentation.title), 'user_topic')
+  const userContext = buildUserContext(presentation)
+
   return `${GENERATION_SYSTEM_PROMPT}
 
+User topic:
+${userTopic}
+
 User context:
-- Topic: ${presentation.title}
-- Audience: ${presentation.audience ?? 'General audience'}
-- Target duration: ${presentation.target_duration ?? '10 minutes'}
+${userContext}
 
 Source document context:
 ${buildSourceContext(sourceDocuments, searchText)}
@@ -190,20 +215,29 @@ const buildRegenerationPrompt = (
     instruction,
   ].join(' ')
 
+  const userTopic = wrapUserContent(sanitizeInput(presentation.title), 'user_topic')
+  const userContext = buildUserContext(presentation)
+  const existingMoment = wrapUserContent(
+    sanitizeInput(JSON.stringify(moment, null, 2)),
+    'existing_moment'
+  )
+  const userInstruction = wrapUserContent(sanitizeInput(instruction), 'user_instruction')
+
   return `${GENERATION_SYSTEM_PROMPT}
 
 Regenerate exactly one presentation moment. Return a single JSON object, or an array containing only that one object.
 
-Presentation context:
-- Topic: ${presentation.title}
-- Audience: ${presentation.audience ?? 'General audience'}
-- Target duration: ${presentation.target_duration ?? '10 minutes'}
+User topic:
+${userTopic}
+
+User context:
+${userContext}
 
 Existing moment:
-${JSON.stringify(moment, null, 2)}
+${existingMoment}
 
 User instruction:
-${instruction}
+${userInstruction}
 
 Source document context:
 ${buildSourceContext(sourceDocuments, searchText)}
@@ -212,13 +246,7 @@ Keep the same narrative role unless the instruction clearly asks for a change. P
 }
 
 const collectStreamedText = async (prompt: string) => {
-  const chunks: string[] = []
-
-  for await (const chunk of generateMoments(prompt)) {
-    chunks.push(chunk)
-  }
-
-  return chunks.join('')
+  return collectTextStream(generateMoments(prompt))
 }
 
 const stripJsonMarkdown = (response: string) => {
@@ -430,7 +458,7 @@ const getSourceDocuments = async (
 }
 
 const throwFriendlyGenerationError = (error: unknown): never => {
-  if (error instanceof TRPCError) {
+  if (error instanceof TRPCError || isAIServiceError(error) || isGenerationTimeoutError(error)) {
     throw error
   }
 
@@ -504,6 +532,15 @@ export const generationRouter = router({
         }
 
         const sortedCreatedMoments = [...createdMoments].sort((first, second) => first.position - second.position)
+        const partialResult = {
+          presentationId: input.presentationId,
+          createdCount: sortedCreatedMoments.length,
+          expectedCount: verifiedMoments.length,
+        }
+
+        if (sortedCreatedMoments.length < verifiedMoments.length) {
+          throw createPartialGenerationTRPCError(partialResult)
+        }
 
         const { error: updatePresentationError } = await ctx.supabase
           .from('presentations')
@@ -516,10 +553,14 @@ export const generationRouter = router({
           .eq('user_id', user.id)
 
         if (updatePresentationError) {
-          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Could not update presentation' })
+          throw createPartialGenerationTRPCError(partialResult)
         }
 
-        await incrementGenerationCount(user.id, ctx.supabase)
+        try {
+          await incrementGenerationCount(user.id, ctx.supabase)
+        } catch {
+          throw createPartialGenerationTRPCError(partialResult)
+        }
 
         return sortedCreatedMoments.map((moment, index) => ({
           ...moment,

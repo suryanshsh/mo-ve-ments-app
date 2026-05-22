@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
 import type { MomentEmotion } from '@/lib/supabase/types'
 import type { PresentationMoment } from '@/stores/presentation'
 import SourceBadge from './SourceBadge'
@@ -8,13 +8,13 @@ import SlideEditor from './SlideEditor'
 import ScriptEditor from './ScriptEditor'
 import VerificationBadge from './VerificationBadge'
 
-const EMOTION_META: Record<MomentEmotion, { label: string; icon: string; color: string; bg: string }> = {
-  hook: { label: 'Hook', icon: '↗', color: '#3A7BD5', bg: '#EBF2FC' },
-  empathy: { label: 'Empathy', icon: '♥', color: '#D85A30', bg: '#FAECE7' },
-  build: { label: 'Build', icon: '↑', color: '#C68B1E', bg: '#FDF5E6' },
-  reveal: { label: 'Reveal', icon: '✦', color: '#1D9E75', bg: '#E1F5EE' },
-  proof: { label: 'Proof', icon: '✓', color: '#2A8C5E', bg: '#E8F5EE' },
-  close: { label: 'Close', icon: '●', color: '#C4501B', bg: '#FDF0EB' },
+const EMOTION_META: Record<MomentEmotion, { label: string; icon: string; color: string; bg: string; purpose: string }> = {
+  hook: { label: 'Hook', icon: '↗', color: '#3A7BD5', bg: '#EBF2FC', purpose: 'Opens attention and frames the stakes.' },
+  empathy: { label: 'Empathy', icon: '♥', color: '#D85A30', bg: '#FAECE7', purpose: 'Builds trust by meeting the audience where they are.' },
+  build: { label: 'Build', icon: '↑', color: '#C68B1E', bg: '#FDF5E6', purpose: 'Develops the core argument or journey.' },
+  reveal: { label: 'Reveal', icon: '✦', color: '#1D9E75', bg: '#E1F5EE', purpose: 'Introduces the key insight or turning point.' },
+  proof: { label: 'Proof', icon: '✓', color: '#2A8C5E', bg: '#E8F5EE', purpose: 'Supports the claim with evidence.' },
+  close: { label: 'Close', icon: '●', color: '#82A5C2', bg: '#E2EDF5', purpose: 'Lands the takeaway and call to action.' },
 }
 
 type MomentCardProps = {
@@ -39,12 +39,19 @@ function EmotionBadge({ emotion }: { emotion: MomentEmotion }) {
   const meta = EMOTION_META[emotion]
 
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-      style={{ backgroundColor: meta.bg, color: meta.color }}
-    >
-      <span className="text-[12px] leading-none">{meta.icon}</span>
-      {meta.label}
+    <span className="group relative inline-flex">
+      <span
+        tabIndex={0}
+        title={meta.purpose}
+        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+        style={{ backgroundColor: meta.bg, color: meta.color }}
+      >
+        <span className="text-[12px] leading-none">{meta.icon}</span>
+        {meta.label}
+      </span>
+      <span className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 hidden w-52 rounded-md border border-border bg-surface px-3 py-2 text-xs font-medium leading-5 text-textMid shadow-lg group-hover:block group-focus-within:block">
+        {meta.purpose}
+      </span>
     </span>
   )
 }
@@ -129,35 +136,73 @@ function TrustBadges({ moment }: { moment: PresentationMoment }) {
   )
 }
 
+const isNestedInteractiveTarget = (target: EventTarget | null, currentTarget: HTMLElement) =>
+  target instanceof HTMLElement &&
+  target !== currentTarget &&
+  Boolean(target.closest('button, a, input, textarea, select, [role="button"], [tabindex]'))
+
 export default function MomentCard({ moment, index, isActive, isLast, onToggle, style }: MomentCardProps) {
   const [isScriptEditing, setIsScriptEditing] = useState(false)
+  const [shouldRenderDetails, setShouldRenderDetails] = useState(isActive)
   const isUncited = moment._verification?.status === 'uncited'
 
   useEffect(() => {
     if (!isActive) setIsScriptEditing(false)
   }, [isActive])
 
+  useEffect(() => {
+    if (isActive) {
+      setShouldRenderDetails(true)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => setShouldRenderDetails(false), 300)
+    return () => window.clearTimeout(timeoutId)
+  }, [isActive])
+
+  const handleCardClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (isNestedInteractiveTarget(event.target, event.currentTarget)) return
+    if (!isActive) onToggle()
+  }
+
+  const handleCardKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (isNestedInteractiveTarget(event.target, event.currentTarget)) return
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onToggle()
+    }
+  }
+
   return (
     <article className="flex gap-4" style={style}>
       <div className="relative flex w-7 shrink-0 justify-center">
-        <span
-          className={`mt-6 h-2.5 w-2.5 rounded-full border-2 bg-bg transition-colors ${
-            isActive ? 'border-accent' : 'border-textLight'
-          }`}
-        />
+        <span className="relative mt-6 grid h-2.5 w-2.5 place-items-center">
+          {isActive && <span className="absolute h-5 w-5 animate-ping rounded-full bg-accent/25" />}
+          <span
+            className={`relative h-2.5 w-2.5 rounded-full border-2 bg-bg transition-colors ${
+              isActive ? 'border-accent' : 'border-textLight'
+            }`}
+          />
+        </span>
         {!isLast && <span className="absolute bottom-[-28px] top-10 w-px bg-border" />}
       </div>
 
       <div
-        onClick={isActive ? undefined : onToggle}
-        className={`min-w-0 flex-1 rounded-xl border bg-surface p-5 shadow-sm transition-all duration-200 ${
+        role="button"
+        tabIndex={0}
+        aria-expanded={isActive}
+        onClick={handleCardClick}
+        onKeyDown={handleCardKeyDown}
+        className={`min-w-0 flex-1 cursor-pointer rounded-xl border bg-surface p-5 shadow-sm transition-all duration-300 ${
           isActive
-            ? 'border-accent/25 shadow-[0_18px_50px_rgba(28,28,26,0.08)]'
-            : 'border-border hover:border-accent/25 hover:shadow-[0_14px_35px_rgba(28,28,26,0.06)]'
-        } ${isUncited ? 'border-l-[3px] border-l-red-300' : ''} ${isActive ? '' : 'cursor-pointer'}`}
+            ? 'border-accent/25 shadow-[0_18px_50px_rgba(58,71,90,0.08)]'
+            : 'border-border hover:border-accent/25 hover:shadow-[0_14px_35px_rgba(58,71,90,0.06)]'
+        } ${isUncited ? 'border-l-[3px] border-l-red-300' : ''}`}
       >
         <button
           type="button"
+          aria-expanded={isActive}
           onClick={(event) => {
             event.stopPropagation()
             onToggle()
@@ -192,41 +237,49 @@ export default function MomentCard({ moment, index, isActive, isLast, onToggle, 
           </div>
         )}
 
-        {isActive ? (
-          <>
-            <div className="mt-5 grid gap-5 xl:grid-cols-2">
-              <SlideEditor moment={moment} slideNumber={index + 1} />
-              <ScriptEditor moment={moment} isEditing={isScriptEditing} onEditingChange={setIsScriptEditing} />
-            </div>
+        <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isActive ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+          <div className="overflow-hidden">
+            {shouldRenderDetails && (
+              <div className={`transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-0'}`}>
+                <div className="mt-5 grid gap-5 md:grid-cols-2">
+                  <SlideEditor moment={moment} slideNumber={index + 1} />
+                  <ScriptEditor moment={moment} isEditing={isScriptEditing} onEditingChange={setIsScriptEditing} />
+                </div>
 
-            <div className="mt-5 flex flex-col gap-3 border-t border-border-light pt-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsScriptEditing(true)}
-                  className="rounded-[10px] border border-border bg-surface px-3.5 py-2 text-sm font-medium text-textMid transition-colors hover:border-accent/30 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={isScriptEditing}
-                >
-                  Edit script
-                </button>
-                <button
-                  type="button"
-                  className="rounded-[10px] border border-border bg-bgAlt px-3.5 py-2 text-sm font-medium text-textMid transition-colors hover:border-accent/30 hover:text-text"
-                >
-                  Revise with agent
-                </button>
+                <div className="mt-5 flex flex-col gap-3 border-t border-border-light pt-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsScriptEditing(true)}
+                      className="rounded-[10px] border border-border bg-surface px-3.5 py-2 text-sm font-medium text-textMid transition-colors hover:border-accent/30 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isScriptEditing}
+                    >
+                      Edit script
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-[10px] border border-border bg-bgAlt px-3.5 py-2 text-sm font-medium text-textMid transition-colors hover:border-accent/30 hover:text-text"
+                    >
+                      Revise with agent
+                    </button>
+                  </div>
+                  <TrustBadges moment={moment} />
+                </div>
               </div>
-              <TrustBadges moment={moment} />
-            </div>
-          </>
-        ) : (
-          <div className="mt-4 grid gap-4 md:grid-cols-[110px_minmax(0,1fr)]">
-            <MiniSlide moment={moment} />
-            <div className="min-w-0 self-center">
-              <p className="line-clamp-2 text-[13px] leading-5 text-textMid">{moment.script}</p>
+            )}
+          </div>
+        </div>
+
+        <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isActive ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
+          <div className="overflow-hidden">
+            <div className={`mt-4 grid gap-4 transition-opacity duration-300 md:grid-cols-[110px_minmax(0,1fr)] ${isActive ? 'opacity-0' : 'opacity-100'}`}>
+              <MiniSlide moment={moment} />
+              <div className="min-w-0 self-center">
+                <p className="line-clamp-2 text-[13px] leading-5 text-textMid">{moment.script}</p>
+              </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </article>
   )

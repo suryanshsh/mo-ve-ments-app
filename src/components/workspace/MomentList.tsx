@@ -32,7 +32,7 @@ export default function MomentList() {
           className={`transition-all duration-500 ease-out ${
             isMounted ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
           }`}
-          style={{ transitionDelay: `${index * 70}ms` }}
+            style={{ transitionDelay: isMounted ? `${index * 60}ms` : '0ms' }}
         >
           <MomentCard
             moment={moment}

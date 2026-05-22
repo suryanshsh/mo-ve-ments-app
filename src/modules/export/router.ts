@@ -4,8 +4,6 @@ import { z } from 'zod'
 import { generatePptx, type Moment, type Presentation } from './pptx-generator'
 
 const EXPORTS_BUCKET = 'exports'
-const SIGNED_URL_TTL_SECONDS = 60 * 60
-
 type ProfileRecord = {
   plan: 'free' | 'pro' | 'team'
 }
@@ -154,26 +152,14 @@ export const exportRouter = router({
         })
       }
 
-      const { data: signedUrlData, error: signedUrlError } = await ctx.supabase.storage
-        .from(EXPORTS_BUCKET)
-        .createSignedUrl(objectPath, SIGNED_URL_TTL_SECONDS, { download: fileName })
-
-      if (signedUrlError || !signedUrlData?.signedUrl) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: signedUrlError?.message ?? 'Could not create export download link',
-        })
-      }
-
-      const expiresAt = new Date(Date.now() + SIGNED_URL_TTL_SECONDS * 1000).toISOString()
       const { data: exportRecord, error: insertError } = await ctx.supabase
         .from('exports')
         .insert({
           presentation_id: presentation.id,
           format: 'pptx',
           file_path: filePath,
-          signed_url: signedUrlData.signedUrl,
-          expires_at: expiresAt,
+          signed_url: null,
+          expires_at: null,
         })
         .select('id')
         .single()
@@ -186,7 +172,7 @@ export const exportRouter = router({
       }
 
       return {
-        downloadUrl: signedUrlData.signedUrl,
+        downloadUrl: `/api/export/download/${exportRecord.id}`,
         exportId: exportRecord.id as string,
       }
     }),

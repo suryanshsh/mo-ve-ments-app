@@ -29,16 +29,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <header className="border-b border-border bg-surface">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <a href="/dashboard" className="font-serif text-xl tracking-tight">
-            <span className="text-accent">Mo</span>
-            <span className="text-accent/50">(ve)</span>
-            <span className="text-accent">ments</span>
+            <span className="text-brand">Mo</span>
+            <span className="text-brand/50">(ve)</span>
+            <span className="text-brand">ments</span>
           </a>
 
           <div className="flex items-center gap-4">
             {email && (
               <span className="text-sm text-textMid hidden sm:inline">{email}</span>
             )}
+            <a href="/settings" className="text-sm text-textMid transition-colors hover:text-text">
+              Settings
+            </a>
             <button
+              type="button"
               onClick={handleSignOut}
               className="text-sm text-textMid hover:text-text transition-colors"
             >

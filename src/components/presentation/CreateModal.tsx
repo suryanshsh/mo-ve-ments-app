@@ -189,7 +189,7 @@ export default function CreateModal({ onClose }: { onClose: () => void }) {
             {generationFailed && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
                 <p className="text-sm text-red-700">
-                  We could not generate your moments just now. Your presentation and files are saved.
+                  {generationMutation.error?.message ?? 'We could not generate your moments just now. Your presentation and files are saved.'}
                 </p>
               </div>
             )}

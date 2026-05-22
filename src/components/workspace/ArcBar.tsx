@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { usePresentationStore } from '@/stores/presentation'
 import type { MomentEmotion } from '@/lib/supabase/types'
 
@@ -9,7 +10,7 @@ const EMOTION_COLORS: Record<MomentEmotion, string> = {
   build: '#C68B1E',
   reveal: '#1D9E75',
   proof: '#2A8C5E',
-  close: '#C4501B',
+  close: '#82A5C2',
 }
 
 const formatDuration = (seconds: number) => {
@@ -22,9 +23,17 @@ const formatDuration = (seconds: number) => {
 }
 
 export default function ArcBar() {
+  const [isMounted, setIsMounted] = useState(false)
   const { moments, presentation } = usePresentationStore()
   const totalSeconds = moments.reduce((sum, moment) => sum + moment.duration_seconds, 0)
   const totalDuration = presentation?.total_duration ?? formatDuration(totalSeconds)
+
+  useEffect(() => {
+    setIsMounted(false)
+
+    const frameId = window.requestAnimationFrame(() => setIsMounted(true))
+    return () => window.cancelAnimationFrame(frameId)
+  }, [moments.length, totalSeconds])
 
   return (
     <section className="border-b border-border bg-bg">
@@ -35,9 +44,11 @@ export default function ArcBar() {
               {moments.map((moment) => (
                 <div
                   key={moment.id}
-                  className="h-full transition-[flex-grow] duration-500 ease-out"
+                  className="h-full shrink-0 transition-[width] duration-500 ease-out"
                   style={{
-                    flexGrow: Math.max(moment.duration_seconds, 1),
+                    width: isMounted && totalSeconds > 0
+                      ? `${(moment.duration_seconds / totalSeconds) * 100}%`
+                      : '0%',
                     backgroundColor: EMOTION_COLORS[moment.emotion],
                   }}
                   title={`${moment.title} · ${formatDuration(moment.duration_seconds)}`}

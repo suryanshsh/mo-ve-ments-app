@@ -9,14 +9,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        accent: "#C4501B",
-        surface: "#FFFFFF",
-        bg: "#FAFAF7",
-        bgAlt: "#F3F2EE",
-        text: "#1C1C1A",
-        textMid: "#5A5A56",
-        textLight: "#9C9C96",
-        border: "#E8E6E0",
+        accent: "#82A5C2",
+        brand: "#C4501B",
+        surface: "#EAECEC",
+        bg: "#F3F5F7",
+        bgAlt: "#E2E7EA",
+        text: "#2F3136",
+        textMid: "#5F6670",
+        textLight: "#89929D",
+        border: "#D5DADB",
       },
       fontFamily: {
         serif: ["Instrument Serif", "serif"],

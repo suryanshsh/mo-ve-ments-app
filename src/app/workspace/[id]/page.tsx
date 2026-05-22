@@ -1,3 +1,4 @@
+import ErrorBoundary from '@/components/ui/ErrorBoundary'
 import WorkspaceClient from '@/components/workspace/WorkspaceClient'
 
 export default async function WorkspacePage({
@@ -7,5 +8,9 @@ export default async function WorkspacePage({
 }) {
   const { id } = await params
 
-  return <WorkspaceClient presentationId={id} />
+  return (
+    <ErrorBoundary>
+      <WorkspaceClient presentationId={id} />
+    </ErrorBoundary>
+  )
 }

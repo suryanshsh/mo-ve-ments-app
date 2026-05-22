@@ -52,8 +52,8 @@ export default function Toast() {
       : 'border-border bg-surface text-text'
 
   return (
-    <div className="fixed inset-x-0 bottom-5 z-50 flex justify-center px-4 pointer-events-none">
-      <div className={`max-w-md rounded-xl border px-4 py-3 text-sm shadow-lg ${variantClass}`}>
+    <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center px-4">
+      <div className={`animate-toast-in max-w-md rounded-xl border px-4 py-3 text-sm shadow-lg ${variantClass}`}>
         {toast.message}
       </div>
     </div>

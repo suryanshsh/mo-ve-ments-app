@@ -4,6 +4,7 @@ import { APIError } from '@anthropic-ai/sdk'
 import type { MessageParam, MessageStreamEvent } from '@anthropic-ai/sdk/resources/messages'
 
 import { anthropic } from './client'
+import { AIServiceError } from './errors'
 
 const AGENT_MODEL = process.env.ANTHROPIC_AGENT_MODEL ?? 'claude-haiku-4-5-20251001'
 const RETRY_DELAY_MS = 1000
@@ -33,20 +34,9 @@ const isRetryableError = (error: unknown) => {
   return status === 429 || status === 500
 }
 
-const errorMessage = (error: unknown) => {
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return String(error)
-}
-
 const buildAnthropicError = (operation: string, error: unknown, retried: boolean) => {
   const status = getStatus(error)
-  const statusText = status ? ` status ${status}` : 'unknown status'
-  const retryText = retried ? ' after retry' : ''
-
-  return new Error(`${operation} failed${retryText} (${statusText}): ${errorMessage(error)}`)
+  return new AIServiceError({ operation, status, retried, cause: error })
 }
 
 const getTextDelta = (event: MessageStreamEvent) => {

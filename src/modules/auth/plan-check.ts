@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server'
 import type { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 
 const GENERATION_LIMITS = {
   free: 3,
@@ -59,7 +60,8 @@ const resetDailyCountIfNeeded = async (userId: string, profile: ProfileRecord, s
   }
 
   const nextResetAt = getNextUtcMidnight()
-  const { data: updatedProfile, error } = await supabase
+  const adminSupabase = createSupabaseAdminClient()
+  const { data: updatedProfile, error } = await adminSupabase
     .from('profiles')
     .update({
       generation_count_today: 0,
@@ -135,7 +137,8 @@ export async function incrementGenerationCount(userId: string, supabase: Supabas
   const profile = await loadProfile(userId, supabase)
   const normalizedProfile = await resetDailyCountIfNeeded(userId, profile, supabase)
 
-  const { error } = await supabase
+  const adminSupabase = createSupabaseAdminClient()
+  const { error } = await adminSupabase
     .from('profiles')
     .update({
       generation_count_today: Math.max(0, normalizedProfile.generation_count_today) + 1,

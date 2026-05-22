@@ -28,7 +28,7 @@ export default function ScriptEditor({ moment, isEditing, onEditingChange }: Scr
   }
 
   return (
-    <section className="flex min-h-[320px] flex-col rounded-xl bg-[#F3F2EE] p-5">
+    <section className="flex min-h-[320px] flex-col rounded-xl bg-bgAlt p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <span className="text-[11px] font-semibold tracking-[0.16em] text-textLight">🎤 SPEAKER SCRIPT</span>
         {isEditing && (
@@ -55,7 +55,7 @@ export default function ScriptEditor({ moment, isEditing, onEditingChange }: Scr
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          className="min-h-[240px] flex-1 resize-none rounded-[10px] border border-border bg-surface px-4 py-3 text-[14px] leading-8 text-text outline-none transition-colors placeholder:text-textLight focus:border-accent focus:ring-2 focus:ring-accent/15"
+          className="min-h-[240px] flex-1 resize-none rounded-[10px] border border-border bg-surface px-4 py-3 text-[14px] leading-8 text-text outline-none transition-colors placeholder:text-textLight focus:border-accent focus:ring-2 focus:ring-accent/25 focus:ring-offset-2 focus:ring-offset-bgAlt"
           autoFocus
         />
       ) : (

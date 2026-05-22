@@ -6,6 +6,7 @@ import { generationRouter } from '@/modules/generation/router'
 import { momentRouter } from '@/modules/moment/router'
 import { agentRouter } from '@/modules/agent/router'
 import { exportRouter } from '@/modules/export/router'
+import { billingRouter } from '@/modules/billing/router'
 
 export const appRouter = router({
   auth: authRouter,
@@ -15,6 +16,7 @@ export const appRouter = router({
   moment: momentRouter,
   agent: agentRouter,
   export: exportRouter,
+  billing: billingRouter,
 })
 
 export type AppRouter = typeof appRouter

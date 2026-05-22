@@ -89,14 +89,14 @@ export default function SlideEditor({ moment, slideNumber }: SlideEditorProps) {
               if (event.key === 'Enter') commitHeading()
               if (event.key === 'Escape') cancelHeading()
             }}
-            className="mb-5 w-full rounded-md border border-white/15 bg-white/10 px-2 py-1.5 text-base font-semibold text-white outline-none transition-colors placeholder:text-white/35 focus:border-[#F59E0B]"
+            className="mb-5 w-full rounded-md border border-white/15 bg-white/10 px-2 py-1.5 text-base font-semibold text-white outline-none transition-colors placeholder:text-white/35 focus:border-[#F59E0B] focus:ring-2 focus:ring-[#F59E0B]/30 focus:ring-offset-2 focus:ring-offset-[#1E293B]"
             autoFocus
           />
         ) : (
           <button
             type="button"
             onClick={startHeadingEdit}
-            className="mb-5 max-w-[88%] text-left text-base font-semibold leading-snug text-white transition-colors hover:text-[#F59E0B]"
+            className="mb-5 -mx-2 max-w-[88%] rounded-md px-2 py-1 text-left text-base font-semibold leading-snug text-white transition-colors hover:bg-white/10 hover:text-[#F59E0B]"
           >
             {moment.slide_heading || 'Untitled slide'}
           </button>
@@ -116,7 +116,7 @@ export default function SlideEditor({ moment, slideNumber }: SlideEditorProps) {
                       if (event.key === 'Enter') commitBullet()
                       if (event.key === 'Escape') cancelBullet()
                     }}
-                    className="min-w-0 flex-1 rounded-md border border-white/15 bg-white/10 px-2 py-1 text-[13px] leading-5 text-white outline-none transition-colors placeholder:text-white/35 focus:border-[#F59E0B]"
+                    className="min-w-0 flex-1 rounded-md border border-white/15 bg-white/10 px-2 py-1 text-[13px] leading-5 text-white outline-none transition-colors placeholder:text-white/35 focus:border-[#F59E0B] focus:ring-2 focus:ring-[#F59E0B]/30 focus:ring-offset-2 focus:ring-offset-[#1E293B]"
                     autoFocus
                   />
                   <button
@@ -133,7 +133,7 @@ export default function SlideEditor({ moment, slideNumber }: SlideEditorProps) {
                 <button
                   type="button"
                   onClick={() => startBulletEdit(index)}
-                  className="min-w-0 text-left text-[13px] leading-5 text-slate-200 transition-colors hover:text-white"
+                  className="-mx-2 min-w-0 rounded-md px-2 py-1 text-left text-[13px] leading-5 text-slate-200 transition-colors hover:bg-white/10 hover:text-white"
                 >
                   {bullet || 'New point'}
                 </button>
@@ -145,7 +145,7 @@ export default function SlideEditor({ moment, slideNumber }: SlideEditorProps) {
         <button
           type="button"
           onClick={addBullet}
-          className="mt-5 w-fit text-[13px] font-medium text-[#F59E0B] transition-colors hover:text-amber-300"
+          className="mt-5 w-fit rounded-md px-2 py-1 text-[13px] font-medium text-[#F59E0B] transition-colors hover:bg-white/10 hover:text-amber-300"
         >
           + Add point
         </button>

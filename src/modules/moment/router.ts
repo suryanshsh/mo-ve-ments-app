@@ -73,11 +73,11 @@ export const momentRouter = router({
       })).min(1),
     }))
     .mutation(async ({ ctx, input }) => {
-      await requireUser(ctx.supabase)
+      const user = await requireUser(ctx.supabase)
 
       const { data: updatedMoments, error } = await ctx.supabase.rpc(
         'batch_update_moment_positions',
-        { p_updates: input.updates }
+        { p_user_id: user.id, p_updates: input.updates }
       )
 
       if (error || !updatedMoments) {

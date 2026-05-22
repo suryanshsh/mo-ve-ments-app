@@ -341,6 +341,159 @@
 
 ---
 
+## Phase 17: Security Hardening *(In Progress — uncommitted)*
+
+- **`src/middleware/security.ts`** — Input and prompt-boundary helpers
+  - Adds `sanitizeInput(input)` for text fields with HTML/script/null/control-character stripping and a 10,000-character cap
+  - Adds `sanitizeDocumentContent(input)` for document text with the same stripping and a 50,000-character cap
+  - Adds `wrapUserContent(content, tag)` for XML prompt delimiters, including source-document tags with attributes
+  - Adds recursive `sanitizeStructuredInput` for tRPC mutation payloads while preserving base64 upload bodies
+- **`src/middleware/rate-limiter.ts`** — In-memory token bucket limiter
+  - Adds `crud` tier at 10 requests/second/user
+  - Adds `generation` tier at 2 requests/second/user
+  - Returns retry timing for `Retry-After` responses
+- **`src/middleware.ts`** — API route rate limiting
+  - Runs middleware on API routes as well as protected pages
+  - Applies user-scoped rate limiting to authenticated requests and IP-scoped fallback limiting for anonymous API requests
+  - Uses the stricter generation tier for AI generation and agent chat tRPC calls
+- **`src/lib/trpc/server.ts`** — Global tRPC mutation sanitization
+  - Applies recursive string sanitization to all mutation inputs before route handlers run
+- **`src/lib/documents/file-validator.ts`** — Upload security checks
+  - Adds filename sanitization for path traversal and unsafe characters
+  - Enforces extension allowlist: pdf, docx, txt, csv, md
+  - Enforces 10MB max upload size
+  - Checks PDF and DOCX magic bytes before extraction/storage
+- **`src/modules/document/router.ts`** — Upload validation wiring
+  - Uses sanitized filenames for storage paths and database records
+  - Sanitizes extracted document text before chunking and persistence
+- **`src/modules/generation/router.ts`** — Prompt injection hardening
+  - Wraps user topic in `<user_topic>` tags
+  - Wraps audience/duration context in `<user_context>` tags
+  - Wraps source chunks in `<source_document name="filename">` tags
+  - Wraps regeneration instructions and existing moment context before insertion into prompts
+- **`src/lib/ai/prompts.ts`** — System prompt warning
+  - Adds explicit instruction that XML-tagged content is user-provided data, not instructions to follow
+- **`src/scripts/security-check.ts`** — Client secret audit
+  - Scans `src/app` and `src/components` client components for `process.env` usage
+  - Flags `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` references in client components
+  - Runs with `npx tsx src/scripts/security-check.ts`
+- **Validation:**
+  - `npx tsx src/scripts/security-check.ts` passed
+  - `npx tsc --noEmit --pretty false` passed
+  - `git diff --check` passed
+  - `npm run build` passed
+
+---
+
+## Phase 18: Error Handling & Sentry Monitoring *(In Progress — uncommitted)*
+
+- **Package added:** `@sentry/nextjs`
+- **Sentry setup**
+  - Ran the Sentry Next.js wizard until it required browser login; completed setup manually to avoid credential handling
+  - Adds `sentry.client.config.ts`, `sentry.server.config.ts`, and `sentry.edge.config.ts`
+  - Adds `instrumentation.ts` with runtime-specific Sentry registration and `onRequestError`
+  - Wraps `next.config.ts` with `withSentryConfig`, using env-based org/project/auth token settings and source map upload disabled without `SENTRY_AUTH_TOKEN`
+- **`src/middleware/error-handler.ts`** — Global tRPC error handling
+  - Captures tRPC errors in Sentry with anonymized user IDs/emails, request path, tRPC path/type, and structured diagnostics
+  - Maps Anthropic 429, 500+, and timeout failures to safe client messages
+  - Converts Supabase/internal load/save failures to friendly messages without returning raw provider errors
+  - Adds partial-generation metadata serialization for the tRPC client
+- **`src/lib/trpc/server.ts`** — Error middleware wiring
+  - Adds request/user context for Sentry diagnostics
+  - Applies the global error handler before mutation input sanitization and router handlers
+  - Adds an error formatter that preserves partial-generation metadata while keeping messages safe
+- **AI wrappers and timeout handling**
+  - Adds structured Anthropic `AIServiceError` metadata for status, provider, operation, and retry state
+  - Adds a shared 45-second stream collector used by generation and agent chat
+  - Keeps existing one-retry behavior for Anthropic `429` and `500` responses before final failure
+- **Partial generation flow**
+  - Detects when generated moments were inserted but final presentation updates/counting failed
+  - Sends `createdCount`, `expectedCount`, and `presentationId` back through tRPC error data
+  - Workspace refetches after generation failures so saved partial moments can render
+- **UI error surfaces**
+  - `src/components/ui/ErrorBoundary.tsx`: Sentry-reporting workspace render boundary with reload recovery
+  - `src/components/workspace/GenerationError.tsx`: generation-specific error UI with retry, timeout guidance, and partial-result banner
+  - Workspace route wraps `WorkspaceClient` with `ErrorBoundary`
+  - Create modal now shows the sanitized generation error message from the server
+- **Validation:**
+  - `npx tsx src/scripts/security-check.ts` passed
+  - `npx tsc --noEmit --pretty false` passed
+  - `git diff --check` passed
+  - `npm run build` passed with the existing Next.js `middleware` deprecation warning only
+
+---
+
+## Phase 19: Workspace UI Polish *(In Progress — uncommitted)*
+
+- **Loading and empty states**
+  - Replaces workspace spinner loading with shimmer skeletons for the top bar, arc bar, moment cards, and agent rail
+  - Adds dashboard presentation-card skeletons while loading
+  - Updates the dashboard empty state to **No presentations yet** with an illustration placeholder and **Create your first presentation** action
+  - Centers the draft workspace prompt around **Ready to generate** and **Generate my moments**, while keeping source uploads available below
+- **Workspace motion and micro-interactions**
+  - Adds shared shimmer, toast, message, thinking-dot, and slide-over animation utilities in global CSS
+  - Smooths MomentCard expand/collapse with a 300ms height transition
+  - Changes initial moment load staggering to 60ms
+  - Animates ArcBar segment widths over 500ms on load/data changes
+  - Adds hover highlights for editable slide text and tooltips for emotion badges
+  - Adds a pulse to the active timeline dot
+- **Responsive and keyboard polish**
+  - Converts the agent sidebar below 1024px into a floating chat button that opens a right-side slide-over
+  - Adds agent message-list skeletons, left/right 200ms message entrances, and pulsing thinking dots
+  - Stacks slide and script editors below 768px and uses side-by-side editing at tablet/desktop widths
+  - Adds global visible accent focus rings with 2px offset and keyboard activation for moment/dashboard cards and the upload drop zone
+
+---
+
+## Phase 20: Landing Page *(In Progress — uncommitted)*
+
+- **Root marketing page**
+  - Replaces the placeholder root route with a warm editorial landing page for Mo(ve)ments
+  - Adds a spacious hero with **Your next presentation, nailed.**, primary/secondary CTAs, and a stylized workspace storyboard mockup
+  - Adds three-step **How it works** content for uploading materials, generating moments, and editing/exporting
+  - Adds **Why moments, not slides** comparison visuals for traditional slide decks versus slide + script + timing + emotional arc
+  - Adds Free and Pro pricing cards with current tier limits and export positioning
+  - Adds footer wordmark, Terms/Privacy/Contact links, and the product positioning line
+- **Metadata and motion**
+  - Adds page-level title, description, and Open Graph metadata with a placeholder OG image URL
+  - Uses existing Instrument Serif and Plus Jakarta Sans theme fonts
+  - Adds subtle scroll-triggered fade-up animation utilities with reduced-motion support
+- **Validation:**
+  - `npx tsx src/scripts/security-check.ts` passed
+  - `npx tsc --noEmit --pretty false` passed
+  - `git diff --check` passed
+  - `npm run build` passed with the existing Next.js `middleware` deprecation warning only
+  - Browser preview verified at `http://localhost:3000/`
+
+---
+
+## Phase 21: Lemon Squeezy Billing *(In Progress — uncommitted)*
+
+- **Package added:** `@lemonsqueezy/lemonsqueezy.js`
+- **Stripe artifact review**
+  - Found old Stripe env placeholders, planning docs, Supabase profile columns, and the client-secret audit entry
+  - No active Stripe checkout, webhook, or billing router implementation existed in `src`
+  - Leaves legacy Stripe profile fields intact while adding Lemon Squeezy billing fields
+- **Server billing integration**
+  - Adds server-only Lemon Squeezy SDK setup with `LEMON_SQUEEZY_API_KEY`
+  - Adds `billing` tRPC router with checkout creation, current subscription lookup, and hosted customer portal lookup
+  - Creates hosted checkouts with authenticated user email and `custom.user_id`, redirecting to `/dashboard?upgraded=true`
+  - Registers billing in the root app router
+- **Webhook processing**
+  - Adds `/api/lemonsqueezy/webhook` with raw-body HMAC SHA-256 verification using `LEMON_SQUEEZY_WEBHOOK_SECRET`
+  - Handles `subscription_created` and `subscription_updated`
+  - Updates `profiles.plan`, `ls_customer_id`, `ls_subscription_id`, and `ls_subscription_status` through a service-role Supabase admin client
+- **Billing UI**
+  - Replaces the settings placeholder with a billing card showing Free/Pro/Team plan status
+  - Free users can start Pro checkout from Settings or the upgrade prompt
+  - Paid users can open the Lemon Squeezy customer portal to manage subscriptions, payment methods, cancellations, and invoices
+  - Dashboard shows a success toast after hosted checkout redirects back
+- **Database and security audit**
+  - Adds migration `004_lemonsqueezy_billing.sql` for `ls_*` profile fields and subscription lookup index
+  - Updates local Supabase types and extends client-secret scanning to Lemon Squeezy secrets
+
+---
+
 ## Known Issues
 - `/prototype` page has broken import (`@/../../deckbuddy-reimagined`)
 - Rehearse is intentionally disabled/coming soon

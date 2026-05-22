@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
+import { trpc } from '@/lib/trpc/client'
 import { showToast } from './Toast'
 
 type UpgradePromptProps = {
@@ -13,6 +15,24 @@ export default function UpgradePrompt({
   description,
   onClose,
 }: UpgradePromptProps) {
+  const hasShownReturnToast = useRef(false)
+  const checkoutMutation = trpc.billing.createCheckout.useMutation({
+    onSuccess: (url) => {
+      window.location.href = url
+    },
+    onError: (error) => showToast(error.message || 'Could not start checkout', 'error'),
+  })
+
+  useEffect(() => {
+    if (hasShownReturnToast.current || typeof window === 'undefined') return
+
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('upgraded') !== 'true') return
+
+    hasShownReturnToast.current = true
+    showToast('Upgrade successful. Your plan will update once Lemon Squeezy confirms it.', 'success')
+  }, [])
+
   return (
     <div className="w-full max-w-sm rounded-xl border border-amber-200 bg-amber-50 p-4 text-left shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -37,11 +57,20 @@ export default function UpgradePrompt({
 
       <button
         type="button"
-        onClick={() => showToast('Upgrade checkout is coming soon.', 'default')}
-        className="mt-4 inline-flex rounded-[10px] bg-accent px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent/90"
+        onClick={() => checkoutMutation.mutate({ plan: 'pro' })}
+        disabled={checkoutMutation.isPending}
+        className="mt-4 inline-flex items-center gap-2 rounded-[10px] bg-accent px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
       >
+        {checkoutMutation.isPending && (
+          <span className="h-3.5 w-3.5 rounded-full border-2 border-white/50 border-t-white animate-spin" />
+        )}
         Upgrade to Pro - $15/month
       </button>
+      {checkoutMutation.error && (
+        <p className="mt-3 rounded-[10px] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {checkoutMutation.error.message}
+        </p>
+      )}
     </div>
   )
 }
