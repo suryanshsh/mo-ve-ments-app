@@ -3,7 +3,7 @@ import 'server-only'
 import { APIError } from '@anthropic-ai/sdk'
 import type { MessageStreamEvent, TextBlockParam } from '@anthropic-ai/sdk/resources/messages'
 
-import { anthropic } from './client'
+import { getAnthropicClient } from './client'
 import { AIServiceError } from './errors'
 import { GENERATION_SYSTEM_PROMPT } from './prompts'
 
@@ -58,7 +58,7 @@ export async function* generateMoments(prompt: string): AsyncGenerator<string> {
 
   while (attempt < 2) {
     try {
-      const stream = anthropic.messages.stream(
+      const stream = getAnthropicClient().messages.stream(
         {
           model: GENERATION_MODEL,
           max_tokens: 4096,

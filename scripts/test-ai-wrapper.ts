@@ -132,7 +132,7 @@ Create exactly 5 concise moments. Keep each script under 25 words and use empty 
 }
 
 const runGenerationRetrySmoke = async (ai: AiModule) => {
-  const messages = ai.anthropic.messages as unknown as {
+  const messages = ai.getAnthropicClient().messages as unknown as {
     stream: (...args: unknown[]) => AsyncIterable<MessageStreamEvent>
   }
   const originalStream = messages.stream
@@ -166,7 +166,7 @@ const runGenerationRetrySmoke = async (ai: AiModule) => {
 }
 
 const runAgentRetrySmoke = async (ai: AiModule) => {
-  const messages = ai.anthropic.messages as unknown as {
+  const messages = ai.getAnthropicClient().messages as unknown as {
     stream: (...args: unknown[]) => AsyncIterable<MessageStreamEvent>
   }
   const originalStream = messages.stream
