@@ -37,17 +37,49 @@ const isTrustedOrigin = (req: Request) => {
   return getAllowedOrigins(req).has(candidate.replace(/\/$/, ''))
 }
 
-const handler = (req: Request) => {
+const getProcedurePath = (req: Request) => {
+  const requestUrl = new URL(req.url)
+  const routePrefix = '/api/trpc/'
+
+  if (!requestUrl.pathname.startsWith(routePrefix)) {
+    return undefined
+  }
+
+  return requestUrl.pathname.slice(routePrefix.length)
+}
+
+const handler = async (req: Request) => {
   if (!isTrustedOrigin(req)) {
     return new Response('Forbidden', { status: 403 })
   }
 
-  return fetchRequestHandler({
-    endpoint: '/api/trpc',
-    req,
-    router: appRouter,
-    createContext: createTRPCContext,
-  })
+  try {
+    return await fetchRequestHandler({
+      endpoint: '/api/trpc',
+      req,
+      router: appRouter,
+      createContext: createTRPCContext,
+    })
+  } catch (error) {
+    console.error('[trpc] Request handler failed:', error)
+
+    return Response.json(
+      [
+        {
+          error: {
+            message: 'Internal server error',
+            code: -32603,
+            data: {
+              code: 'INTERNAL_SERVER_ERROR',
+              httpStatus: 500,
+              path: getProcedurePath(req),
+            },
+          },
+        },
+      ],
+      { status: 500 }
+    )
+  }
 }
 
 export { handler as GET, handler as POST }

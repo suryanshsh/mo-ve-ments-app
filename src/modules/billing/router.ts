@@ -1,9 +1,9 @@
-import '@/lib/lemonsqueezy/client'
 import { createCheckout, getSubscription } from '@lemonsqueezy/lemonsqueezy.js'
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 import { publicProcedure, router } from '@/lib/trpc/server'
 import type { ProfilePlan } from '@/lib/supabase/types'
+import { setupLemonSqueezy } from '@/lib/lemonsqueezy/client'
 
 const checkoutInput = z.object({
   plan: z.enum(['pro', 'team']),
@@ -30,6 +30,10 @@ const getVariantIdForPlan = (plan: 'pro' | 'team') => {
   return requireEnv('LEMON_SQUEEZY_TEAM_VARIANT_ID')
 }
 
+const requireLemonSqueezy = () => {
+  setupLemonSqueezy(requireEnv('LEMON_SQUEEZY_API_KEY'))
+}
+
 const requireUser = (user: { id: string; email?: string } | null) => {
   if (!user?.id || !user.email) {
     throw new TRPCError({ code: 'UNAUTHORIZED' })
@@ -43,7 +47,7 @@ export const billingRouter = router({
     .input(checkoutInput)
     .mutation(async ({ ctx, input }) => {
       const user = requireUser(ctx.user)
-      requireEnv('LEMON_SQUEEZY_API_KEY')
+      requireLemonSqueezy()
       const storeId = requireEnv('LEMON_SQUEEZY_STORE_ID')
       const variantId = getVariantIdForPlan(input.plan)
       const appUrl = requireEnv('NEXT_PUBLIC_APP_URL').replace(/\/$/, '')
@@ -116,7 +120,7 @@ export const billingRouter = router({
       })
     }
 
-    requireEnv('LEMON_SQUEEZY_API_KEY')
+    requireLemonSqueezy()
     const subscription = await getSubscription(profile.ls_subscription_id)
     const portalUrl = subscription.data?.data.attributes.urls.customer_portal
 
