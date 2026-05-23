@@ -302,6 +302,10 @@ export type Database = {
         Args: { p_user_id: string; p_updates: JsonObjectArray }
         Returns: MomentsRow[]
       }
+      ensure_own_profile: {
+        Args: Record<string, never>
+        Returns: ProfilesRow
+      }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

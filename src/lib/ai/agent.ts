@@ -3,7 +3,7 @@ import 'server-only'
 import { APIError } from '@anthropic-ai/sdk'
 import type { MessageParam, MessageStreamEvent } from '@anthropic-ai/sdk/resources/messages'
 
-import { anthropic } from './client'
+import { getAnthropicClient } from './client'
 import { AIServiceError } from './errors'
 
 const AGENT_MODEL = process.env.ANTHROPIC_AGENT_MODEL ?? 'claude-haiku-4-5-20251001'
@@ -62,7 +62,7 @@ export async function* agentChat(
 
   while (attempt < 2) {
     try {
-      const stream = anthropic.messages.stream({
+      const stream = getAnthropicClient().messages.stream({
         model: AGENT_MODEL,
         max_tokens: 1000,
         temperature: 0.7,

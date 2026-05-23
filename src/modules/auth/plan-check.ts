@@ -16,12 +16,21 @@ const PRESENTATION_LIMITS = {
 
 type ProfilePlan = keyof typeof GENERATION_LIMITS
 type SupabaseClient = Awaited<ReturnType<typeof createServerSupabaseClient>>
+type UserIdentity = string | { id: string }
 
 type ProfileRecord = {
   plan: ProfilePlan
   generation_count_today: number
   generation_count_reset_at: string | null
 }
+
+const getUserId = (user: UserIdentity) => typeof user === 'string' ? user : user.id
+
+const isMissingProfileError = (error: unknown) =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  (error as { code?: unknown }).code === 'PGRST116'
 
 const getTodayUtcMidnight = () => {
   const now = new Date()
@@ -33,12 +42,30 @@ const getNextUtcMidnight = () => {
   return new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString()
 }
 
-const loadProfile = async (userId: string, supabase: SupabaseClient) => {
+const ensureOwnProfile = async (userId: string, supabase: SupabaseClient) => {
+  const { data: profile, error } = await supabase.rpc('ensure_own_profile')
+
+  if (error || !profile || profile.id !== userId) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Could not create account profile',
+    })
+  }
+
+  return profile as ProfileRecord
+}
+
+const loadProfile = async (user: UserIdentity, supabase: SupabaseClient) => {
+  const userId = getUserId(user)
   const { data: profile, error } = await supabase
     .from('profiles')
     .select('plan, generation_count_today, generation_count_reset_at')
     .eq('id', userId)
     .single()
+
+  if (isMissingProfileError(error)) {
+    return ensureOwnProfile(userId, supabase)
+  }
 
   if (error || !profile) {
     throw new TRPCError({
@@ -81,8 +108,9 @@ const resetDailyCountIfNeeded = async (userId: string, profile: ProfileRecord, s
   return updatedProfile as ProfileRecord
 }
 
-export async function checkGenerationLimit(userId: string, supabase: SupabaseClient) {
-  const profile = await loadProfile(userId, supabase)
+export async function checkGenerationLimit(user: UserIdentity, supabase: SupabaseClient) {
+  const userId = getUserId(user)
+  const profile = await loadProfile(user, supabase)
   const normalizedProfile = await resetDailyCountIfNeeded(userId, profile, supabase)
   const limit = GENERATION_LIMITS[normalizedProfile.plan] ?? GENERATION_LIMITS.free
   const used = Math.max(0, normalizedProfile.generation_count_today)
@@ -95,14 +123,19 @@ export async function checkGenerationLimit(userId: string, supabase: SupabaseCli
   }
 }
 
-export async function checkPresentationLimit(userId: string, supabase: SupabaseClient) {
+export async function checkPresentationLimit(user: UserIdentity, supabase: SupabaseClient) {
+  const userId = getUserId(user)
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('plan')
     .eq('id', userId)
     .single()
 
-  if (profileError || !profile) {
+  const normalizedProfile = isMissingProfileError(profileError)
+    ? await ensureOwnProfile(userId, supabase)
+    : profile
+
+  if (profileError && !isMissingProfileError(profileError) || !normalizedProfile) {
     throw new TRPCError({
       code: 'INTERNAL_SERVER_ERROR',
       message: 'Could not load presentation limits',
@@ -121,7 +154,7 @@ export async function checkPresentationLimit(userId: string, supabase: SupabaseC
     })
   }
 
-  const plan = (profile.plan ?? 'free') as ProfilePlan
+  const plan = (normalizedProfile.plan ?? 'free') as ProfilePlan
   const limit = PRESENTATION_LIMITS[plan] ?? PRESENTATION_LIMITS.free
   const used = count ?? 0
   const remaining = Math.max(0, limit - used)
