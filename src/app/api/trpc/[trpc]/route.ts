@@ -1,6 +1,4 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
-import { appRouter } from '@/lib/trpc/router'
-import { createTRPCContext } from '@/lib/trpc/server'
 
 const getAllowedOrigins = (req: Request) => {
   const requestUrl = new URL(req.url)
@@ -48,12 +46,49 @@ const getProcedurePath = (req: Request) => {
   return requestUrl.pathname.slice(routePrefix.length)
 }
 
+const createInternalErrorResponse = (req: Request) => Response.json(
+  [
+    {
+      error: {
+        message: 'Internal server error',
+        code: -32603,
+        data: {
+          code: 'INTERNAL_SERVER_ERROR',
+          httpStatus: 500,
+          path: getProcedurePath(req),
+        },
+      },
+    },
+  ],
+  { status: 500 }
+)
+
 const handler = async (req: Request) => {
   if (!isTrustedOrigin(req)) {
-    return new Response('Forbidden', { status: 403 })
+    return Response.json(
+      [
+        {
+          error: {
+            message: 'Forbidden',
+            code: -32603,
+            data: {
+              code: 'FORBIDDEN',
+              httpStatus: 403,
+              path: getProcedurePath(req),
+            },
+          },
+        },
+      ],
+      { status: 403 }
+    )
   }
 
   try {
+    const [{ appRouter }, { createTRPCContext }] = await Promise.all([
+      import('@/lib/trpc/router'),
+      import('@/lib/trpc/server'),
+    ])
+
     return await fetchRequestHandler({
       endpoint: '/api/trpc',
       req,
@@ -63,22 +98,7 @@ const handler = async (req: Request) => {
   } catch (error) {
     console.error('[trpc] Request handler failed:', error)
 
-    return Response.json(
-      [
-        {
-          error: {
-            message: 'Internal server error',
-            code: -32603,
-            data: {
-              code: 'INTERNAL_SERVER_ERROR',
-              httpStatus: 500,
-              path: getProcedurePath(req),
-            },
-          },
-        },
-      ],
-      { status: 500 }
-    )
+    return createInternalErrorResponse(req)
   }
 }
 

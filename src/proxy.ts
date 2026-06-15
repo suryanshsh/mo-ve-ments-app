@@ -22,32 +22,12 @@ const getRateLimitTier = (path: string) => {
 }
 
 export async function proxy(request: NextRequest) {
-  const response = await updateSession(request)
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  const { data: { user } } = await supabase.auth.getUser()
   const path = request.nextUrl.pathname
 
   if (path.startsWith('/api/')) {
-    const userId = user?.id ?? `anonymous:${getClientIdentifier(request)}`
+    const clientId = `anonymous:${getClientIdentifier(request)}`
     const tier = getRateLimitTier(path)
-    const rateLimit = checkRateLimit(userId, tier)
+    const rateLimit = checkRateLimit(clientId, tier)
 
     if (!rateLimit.allowed) {
       return NextResponse.json(
@@ -59,7 +39,45 @@ export async function proxy(request: NextRequest) {
       )
     }
 
-    return response
+    return NextResponse.next({ request })
+  }
+
+  let response = NextResponse.next({ request })
+
+  try {
+    response = await updateSession(request)
+  } catch (error) {
+    console.error('[proxy] Session refresh failed:', error)
+  }
+
+  let user: { id: string } | null = null
+
+  try {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll()
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) =>
+              request.cookies.set(name, value)
+            )
+
+            cookiesToSet.forEach(({ name, value, options }) =>
+              response.cookies.set(name, value, options)
+            )
+          },
+        },
+      }
+    )
+
+    const { data } = await supabase.auth.getUser()
+    user = data.user
+  } catch (error) {
+    console.error('[proxy] Auth lookup failed:', error)
   }
 
   if (!user && (path.startsWith('/dashboard') || path.startsWith('/workspace/') || path.startsWith('/settings'))) {
