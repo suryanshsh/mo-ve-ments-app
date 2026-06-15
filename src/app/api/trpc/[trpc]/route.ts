@@ -1,5 +1,7 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 
+export const runtime = 'nodejs'
+
 const getAllowedOrigins = (req: Request) => {
   const requestUrl = new URL(req.url)
   const configuredOrigins = [process.env.NEXT_PUBLIC_APP_URL, process.env.ALLOWED_ORIGINS]
@@ -46,7 +48,21 @@ const getProcedurePath = (req: Request) => {
   return requestUrl.pathname.slice(routePrefix.length)
 }
 
-const createInternalErrorResponse = (req: Request) => Response.json(
+const getServerErrorCode = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error)
+
+  if (/supabase/i.test(message) || /SUPABASE/.test(message)) {
+    return 'supabase_setup_failed'
+  }
+
+  if (/module|import|resolve|Cannot find/i.test(message)) {
+    return 'router_import_failed'
+  }
+
+  return 'trpc_handler_failed'
+}
+
+const createInternalErrorResponse = (req: Request, error: unknown, phase: string) => Response.json(
   [
     {
       error: {
@@ -56,6 +72,8 @@ const createInternalErrorResponse = (req: Request) => Response.json(
           code: 'INTERNAL_SERVER_ERROR',
           httpStatus: 500,
           path: getProcedurePath(req),
+          serverErrorCode: getServerErrorCode(error),
+          phase,
         },
       },
     },
@@ -84,10 +102,19 @@ const handler = async (req: Request) => {
   }
 
   try {
-    const [{ appRouter }, { createTRPCContext }] = await Promise.all([
-      import('@/lib/trpc/router'),
-      import('@/lib/trpc/server'),
-    ])
+    let appRouter: Awaited<typeof import('@/lib/trpc/router')>['appRouter']
+    let createTRPCContext: Awaited<typeof import('@/lib/trpc/server')>['createTRPCContext']
+
+    try {
+      ;[{ appRouter }, { createTRPCContext }] = await Promise.all([
+        import('@/lib/trpc/router'),
+        import('@/lib/trpc/server'),
+      ])
+    } catch (error) {
+      console.error('[trpc] Router import failed:', error)
+
+      return createInternalErrorResponse(req, error, 'router_import')
+    }
 
     return await fetchRequestHandler({
       endpoint: '/api/trpc',
@@ -98,7 +125,7 @@ const handler = async (req: Request) => {
   } catch (error) {
     console.error('[trpc] Request handler failed:', error)
 
-    return createInternalErrorResponse(req)
+    return createInternalErrorResponse(req, error, 'request_handler')
   }
 }
 
