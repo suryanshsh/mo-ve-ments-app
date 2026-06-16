@@ -1,4 +1,4 @@
-import { generateMoments, GENERATION_SYSTEM_PROMPT } from '@/lib/ai'
+import { generateMoments } from '@/lib/ai'
 import { isAIServiceError, isGenerationTimeoutError } from '@/lib/ai/errors'
 import { collectTextStream } from '@/lib/ai/stream'
 import { publicProcedure, router } from '@/lib/trpc/server'
@@ -16,6 +16,9 @@ import {
 } from './source-verifier'
 
 const VALID_EMOTIONS = ['hook', 'empathy', 'build', 'reveal', 'proof', 'close'] as const
+const MAX_SOURCE_DOCUMENTS = 5
+const MAX_CHUNKS_PER_DOCUMENT = 2
+const MAX_SOURCE_CHARS_PER_CHUNK = 1800
 
 const sourceCitationSchema = z.union([z.string(), z.record(z.string(), z.unknown())])
 
@@ -123,7 +126,7 @@ const buildUserContext = (presentation: PresentationRecord) =>
 const selectRelevantChunks = (
   sourceDocument: SourceDocumentRecord,
   searchText: string,
-  maxChunks = 3
+  maxChunks = MAX_CHUNKS_PER_DOCUMENT
 ) => {
   const chunks = normalizeChunks(sourceDocument.chunks)
   const availableChunks = chunks.length > 0
@@ -145,15 +148,20 @@ const selectRelevantChunks = (
     .map(({ text, index }) => ({ text, index }))
 }
 
+const compactSourceChunk = (text: string) =>
+  sanitizeDocumentContent(text).slice(0, MAX_SOURCE_CHARS_PER_CHUNK)
+
 const buildSourceContext = (
   sourceDocuments: SourceDocumentRecord[],
   searchText: string
 ) => {
-  if (sourceDocuments.length === 0) {
+  const selectedSourceDocuments = sourceDocuments.slice(-MAX_SOURCE_DOCUMENTS)
+
+  if (selectedSourceDocuments.length === 0) {
     return 'No source documents were uploaded. Use the presentation context only and keep sources arrays empty.'
   }
 
-  return sourceDocuments
+  return selectedSourceDocuments
     .map((sourceDocument) => {
       const selectedChunks = selectRelevantChunks(sourceDocument, searchText)
       const tag = `source_document name="${escapeXmlAttribute(sourceDocument.filename)}"`
@@ -163,7 +171,7 @@ const buildSourceContext = (
       }
 
       const chunks = selectedChunks
-        .map(({ text, index }) => `Chunk ${index + 1}:\n${sanitizeDocumentContent(text)}`)
+        .map(({ text, index }) => `Chunk ${index + 1}:\n${compactSourceChunk(text)}`)
         .join('\n\n')
 
       return wrapUserContent(chunks, tag)
@@ -182,9 +190,7 @@ const buildGenerationPrompt = (
   const userTopic = wrapUserContent(sanitizeInput(presentation.title), 'user_topic')
   const userContext = buildUserContext(presentation)
 
-  return `${GENERATION_SYSTEM_PROMPT}
-
-User topic:
+  return `User topic:
 ${userTopic}
 
 User context:
@@ -223,9 +229,7 @@ const buildRegenerationPrompt = (
   )
   const userInstruction = wrapUserContent(sanitizeInput(instruction), 'user_instruction')
 
-  return `${GENERATION_SYSTEM_PROMPT}
-
-Regenerate exactly one presentation moment. Return a single JSON object, or an array containing only that one object.
+  return `Regenerate exactly one presentation moment. Return a single JSON object, or an array containing only that one object.
 
 User topic:
 ${userTopic}

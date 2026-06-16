@@ -1,4 +1,4 @@
-export const AI_REQUEST_TIMEOUT_MS = 45_000
+export const AI_REQUEST_TIMEOUT_MS = 52_000
 
 type AIServiceErrorOptions = {
   operation: string
