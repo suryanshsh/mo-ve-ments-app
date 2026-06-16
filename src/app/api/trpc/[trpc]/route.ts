@@ -2,6 +2,7 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import type { AnyRouter } from '@trpc/server'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 const getAllowedOrigins = (req: Request) => {
   const requestUrl = new URL(req.url)

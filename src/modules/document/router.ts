@@ -1,6 +1,5 @@
 import { publicProcedure, router } from '@/lib/trpc/server'
 import { z } from 'zod'
-import { extractText } from '@/lib/documents/parser'
 import { chunkText } from '@/lib/documents/chunker'
 import { TRPCError } from '@trpc/server'
 import { sanitizeDocumentContent } from '@/middleware/security'
@@ -111,6 +110,8 @@ export const documentRouter = router({
         }
 
         uploadedFilePath = filePath
+
+        const { extractText } = await import('@/lib/documents/parser')
 
         // Extract text
         const extractedText = sanitizeDocumentContent(await extractText(buffer, safeFilename))
