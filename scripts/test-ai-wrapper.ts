@@ -92,6 +92,13 @@ const collectText = async (stream: AsyncGenerator<string>): Promise<StreamResult
   }
 }
 
+const stripJsonMarkdown = (response: string) => {
+  const trimmed = response.trim()
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
+
+  return (fenced?.[1] ?? trimmed).replace(/^`+|`+$/g, '').trim()
+}
+
 const fakeTextStream = async function* (chunks: string[]): AsyncGenerator<MessageStreamEvent> {
   for (const text of chunks) {
     yield {
@@ -119,7 +126,7 @@ Create exactly 5 concise moments. Keep each script under 25 words and use empty 
   assert.ok(result.chunks > 0, 'generation should yield at least one streamed chunk')
   assert.ok(result.chars > 0, 'generation should yield text')
 
-  const parsed = JSON.parse(result.text) as unknown
+  const parsed = JSON.parse(stripJsonMarkdown(result.text)) as unknown
   assert.ok(Array.isArray(parsed), 'generation output should parse as a JSON array')
   assert.ok(parsed.length >= 5, 'generation output should contain moments')
 

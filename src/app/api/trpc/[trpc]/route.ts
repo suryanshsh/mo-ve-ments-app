@@ -1,4 +1,5 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
+import type { AnyRouter } from '@trpc/server'
 
 export const runtime = 'nodejs'
 
@@ -48,6 +49,21 @@ const getProcedurePath = (req: Request) => {
   return requestUrl.pathname.slice(routePrefix.length)
 }
 
+const getRequestedModuleNames = (procedurePath?: string) => {
+  if (!procedurePath) {
+    return []
+  }
+
+  return Array.from(
+    new Set(
+      decodeURIComponent(procedurePath)
+        .split(',')
+        .map((procedure) => procedure.split('.', 1)[0]?.trim())
+        .filter((name): name is string => !!name)
+    )
+  )
+}
+
 const getServerErrorCode = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error)
 
@@ -81,6 +97,32 @@ const createInternalErrorResponse = (req: Request, error: unknown, phase: string
   { status: 500 }
 )
 
+type RouterComposer = Awaited<typeof import('@/lib/trpc/server')>['router']
+
+const routerLoaders = {
+  auth: async () => (await import('@/modules/auth/router')).authRouter,
+  presentation: async () => (await import('@/modules/presentation/router')).presentationRouter,
+  document: async () => (await import('@/modules/document/router')).documentRouter,
+  generation: async () => (await import('@/modules/generation/router')).generationRouter,
+  moment: async () => (await import('@/modules/moment/router')).momentRouter,
+  agent: async () => (await import('@/modules/agent/router')).agentRouter,
+  export: async () => (await import('@/modules/export/router')).exportRouter,
+  billing: async () => (await import('@/modules/billing/router')).billingRouter,
+} satisfies Record<string, () => Promise<AnyRouter>>
+
+const isKnownModuleName = (name: string): name is keyof typeof routerLoaders =>
+  name in routerLoaders
+
+const createScopedRouter = async (composeRouter: RouterComposer, procedurePath?: string) => {
+  const routerEntries = await Promise.all(
+    getRequestedModuleNames(procedurePath)
+      .filter(isKnownModuleName)
+      .map(async (name) => [name, await routerLoaders[name]()] as const)
+  )
+
+  return composeRouter(Object.fromEntries(routerEntries))
+}
+
 const handler = async (req: Request) => {
   if (!isTrustedOrigin(req)) {
     return Response.json(
@@ -102,14 +144,21 @@ const handler = async (req: Request) => {
   }
 
   try {
-    let appRouter: Awaited<typeof import('@/lib/trpc/router')>['appRouter']
     let createTRPCContext: Awaited<typeof import('@/lib/trpc/server')>['createTRPCContext']
+    let router: RouterComposer
 
     try {
-      ;[{ appRouter }, { createTRPCContext }] = await Promise.all([
-        import('@/lib/trpc/router'),
-        import('@/lib/trpc/server'),
-      ])
+      ;({ createTRPCContext, router } = await import('@/lib/trpc/server'))
+    } catch (error) {
+      console.error('[trpc] Server import failed:', error)
+
+      return createInternalErrorResponse(req, error, 'server_import')
+    }
+
+    let appRouter: AnyRouter
+
+    try {
+      appRouter = await createScopedRouter(router, getProcedurePath(req))
     } catch (error) {
       console.error('[trpc] Router import failed:', error)
 
