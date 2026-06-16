@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
       './node_modules/pdfjs-dist/iccs/**/*',
       './node_modules/pdfjs-dist/standard_fonts/**/*',
       './node_modules/pdfjs-dist/wasm/**/*',
+      './node_modules/@napi-rs/canvas/**/*',
+      './node_modules/@napi-rs/canvas-*/**/*',
     ],
   },
 };

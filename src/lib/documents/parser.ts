@@ -11,8 +11,8 @@ function resolvePdfjsAssetUrl(...segments: string[]): string {
   return pathToFileURL(join(PDFJS_DIST_DIR, ...segments)).href
 }
 
-function resolvePdfjsAssetDirectoryUrl(...segments: string[]): string {
-  return pathToFileURL(`${join(PDFJS_DIST_DIR, ...segments)}/`).href
+function resolvePdfjsAssetDirectoryPath(...segments: string[]): string {
+  return `${join(PDFJS_DIST_DIR, ...segments)}/`
 }
 
 function getExtension(filename: string): AllowedExtension {
@@ -38,12 +38,15 @@ export async function extractText(buffer: Buffer, filename: string): Promise<str
       // pdfjs-dist rejects Buffer; pass ArrayBuffer directly
       const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
       const parser = new PDFParse({
-        cMapUrl: resolvePdfjsAssetDirectoryUrl('cmaps'),
+        cMapUrl: resolvePdfjsAssetDirectoryPath('cmaps'),
         data: ab,
         disableFontFace: true,
-        standardFontDataUrl: resolvePdfjsAssetDirectoryUrl('standard_fonts'),
+        isImageDecoderSupported: false,
+        isOffscreenCanvasSupported: false,
+        standardFontDataUrl: resolvePdfjsAssetDirectoryPath('standard_fonts'),
+        useSystemFonts: false,
+        useWasm: false,
         useWorkerFetch: false,
-        wasmUrl: resolvePdfjsAssetDirectoryUrl('wasm'),
       })
 
       try {
