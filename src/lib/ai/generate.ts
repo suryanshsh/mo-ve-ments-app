@@ -7,7 +7,7 @@ import { getAnthropicClient } from './client'
 import { AIServiceError } from './errors'
 import { GENERATION_SYSTEM_PROMPT } from './prompts'
 
-const GENERATION_MODEL = 'claude-sonnet-4-20250514'
+const GENERATION_MODEL = process.env.ANTHROPIC_GENERATION_MODEL ?? 'claude-sonnet-4-5-20250929'
 const RETRY_DELAY_MS = 1000
 const PROMPT_CACHING_BETA = 'prompt-caching-2024-07-31'
 
