@@ -7,7 +7,8 @@ import { getAnthropicClient } from './client'
 import { AIServiceError } from './errors'
 import { GENERATION_SYSTEM_PROMPT } from './prompts'
 
-const GENERATION_MODEL = process.env.ANTHROPIC_GENERATION_MODEL ?? 'claude-sonnet-4-5-20250929'
+const GENERATION_MODEL = process.env.ANTHROPIC_GENERATION_MODEL ?? 'claude-haiku-4-5-20251001'
+const GENERATION_MAX_TOKENS = Number.parseInt(process.env.ANTHROPIC_GENERATION_MAX_TOKENS ?? '3072', 10)
 const RETRY_DELAY_MS = 1000
 const PROMPT_CACHING_BETA = 'prompt-caching-2024-07-31'
 
@@ -61,7 +62,7 @@ export async function* generateMoments(prompt: string): AsyncGenerator<string> {
       const stream = getAnthropicClient().messages.stream(
         {
           model: GENERATION_MODEL,
-          max_tokens: 4096,
+          max_tokens: Number.isFinite(GENERATION_MAX_TOKENS) ? GENERATION_MAX_TOKENS : 3072,
           temperature: 0.7,
           system: cacheableSystemPrompt(GENERATION_SYSTEM_PROMPT),
           messages: [{ role: 'user', content: prompt }],
