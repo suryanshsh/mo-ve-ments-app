@@ -1,6 +1,21 @@
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+
 const ALLOWED_EXTENSIONS = ['pdf', 'docx', 'txt', 'csv', 'md'] as const
 
 type AllowedExtension = (typeof ALLOWED_EXTENSIONS)[number]
+
+const nodeRequire = createRequire(import.meta.url)
+const pdfjsDistRoot = dirname(nodeRequire.resolve('pdfjs-dist/package.json'))
+
+function resolvePdfjsAssetUrl(...segments: string[]): string {
+  return pathToFileURL(join(pdfjsDistRoot, ...segments)).href
+}
+
+function resolvePdfjsAssetDirectoryUrl(...segments: string[]): string {
+  return pathToFileURL(`${join(pdfjsDistRoot, ...segments)}/`).href
+}
 
 function getExtension(filename: string): AllowedExtension {
   const ext = filename.split('.').pop()?.toLowerCase()
@@ -21,11 +36,24 @@ export async function extractText(buffer: Buffer, filename: string): Promise<str
   switch (ext) {
     case 'pdf': {
       const { PDFParse } = await import('pdf-parse')
+      PDFParse.setWorker(resolvePdfjsAssetUrl('legacy', 'build', 'pdf.worker.mjs'))
       // pdfjs-dist rejects Buffer; pass ArrayBuffer directly
       const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
-      const parser = new PDFParse({ data: ab })
-      const result = await parser.getText()
-      return result.text
+      const parser = new PDFParse({
+        cMapUrl: resolvePdfjsAssetDirectoryUrl('cmaps'),
+        data: ab,
+        disableFontFace: true,
+        standardFontDataUrl: resolvePdfjsAssetDirectoryUrl('standard_fonts'),
+        useWorkerFetch: false,
+        wasmUrl: resolvePdfjsAssetDirectoryUrl('wasm'),
+      })
+
+      try {
+        const result = await parser.getText()
+        return result.text
+      } finally {
+        await parser.destroy()
+      }
     }
     case 'docx': {
       const { extractRawText } = await import('mammoth')
