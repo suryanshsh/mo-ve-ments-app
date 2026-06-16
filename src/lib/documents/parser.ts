@@ -1,6 +1,3 @@
-import { PDFParse } from 'pdf-parse'
-import { extractRawText } from 'mammoth'
-
 const ALLOWED_EXTENSIONS = ['pdf', 'docx', 'txt', 'csv', 'md'] as const
 
 type AllowedExtension = (typeof ALLOWED_EXTENSIONS)[number]
@@ -23,6 +20,7 @@ export async function extractText(buffer: Buffer, filename: string): Promise<str
 
   switch (ext) {
     case 'pdf': {
+      const { PDFParse } = await import('pdf-parse')
       // pdfjs-dist rejects Buffer; pass ArrayBuffer directly
       const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
       const parser = new PDFParse({ data: ab })
@@ -30,6 +28,7 @@ export async function extractText(buffer: Buffer, filename: string): Promise<str
       return result.text
     }
     case 'docx': {
+      const { extractRawText } = await import('mammoth')
       const result = await extractRawText({ buffer })
       return result.value
     }
